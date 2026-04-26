@@ -1,0 +1,309 @@
+{% set reaction_emojis = {
+    "+1": "👍", "-1": "👎", "laugh": "😄", "hooray": "🎉",
+    "confused": "😕", "heart": "❤️", "rocket": "🚀", "eyes": "👀"
+} %}
+
+{% macro render_field(name, value) -%}
+{% if value is not none and value != "" -%}
+- {{ name }}: {{ value }}
+{% endif -%}
+{% endmacro %}
+
+{% macro render_metadata(fields) -%}
+{% for field in fields -%}
+{{- render_field(field.name, field.value) -}}
+{% endfor -%}
+{%- endmacro %}
+
+{% macro render_actor(actor) -%}
+{% if actor.url %}[{{ actor.login }}]({{ actor.url }}){% else %}{{ actor.login }}{% endif %}
+{%- endmacro %}
+
+{% macro render_kind_label(kind) -%}
+{% if kind == "issue" %}Issue{% elif kind == "pull-request" %}Pull Request{% elif kind == "discussion" %}Discussion{% else %}{{ kind }}{% endif %}
+{%- endmacro %}
+
+{% macro render_reaction_emoji(content) -%}
+{{ reaction_emojis[content] if content in reaction_emojis else "" }}
+{%- endmacro %}
+
+{% macro render_heading(level, text) %}
+{{ "#" * level }} {{ text }}
+{% endmacro %}
+
+{% macro render_common_metadata(entry) -%}
+{{ render_field("URL", entry.url) -}}
+{{ render_field("Created", entry.created_at) -}}
+{{ render_field("Updated", entry.updated_at) -}}
+{{ render_field("Author association", entry.author_association) -}}
+{%- endmacro %}
+
+{% macro render_reactions(reactions) -%}
+{% for reaction in reactions -%}
+- {% set emoji = reaction_emojis[reaction.content] if reaction.content in reaction_emojis else "" -%}
+{{ (emoji ~ " ") if emoji }}`{{ reaction.content }}`: {{ reaction.count }}x by
+{% for user in reaction.users -%}
+{{ "  - " ~ render_actor(user) }}
+{% endfor -%}
+{% if reaction.count > reaction.users|length -%}
+{{ "  - (+" ~ (reaction.count - reaction.users|length) ~ " more)" }}
+{% endif -%}
+{% endfor -%}
+{%- endmacro %}
+
+{% macro render_fenced_block(content, language="") %}
+{%- if content is not none and (content | trim) -%}
+```{% if language %}{{ language }}{% endif %}
+{{ content }}
+```
+{%- endif -%}
+{% endmacro %}
+
+{% macro render_markdown_block(body) %}
+{{- render_fenced_block(body, "md") -}}
+{% endmacro %}
+
+{% macro render_diff_block(diff_text) %}
+{{- render_fenced_block(diff_text, "diff") -}}
+{% endmacro %}
+
+{% macro render_comment(comment) %}
+{% if comment.author %}
+{{ render_heading(comment.level, "Comment " ~ comment.ordinal ~ " by " ~ render_actor(comment.author)) }}
+{% else %}
+{{ render_heading(comment.level, "Comment " ~ comment.ordinal ~ " by unknown") }}
+{% endif %}
+
+{{ render_common_metadata(comment) -}}
+{{ render_field("Marked answer", comment.is_answer if comment.is_answer else None) -}}
+{% if comment.metadata %}{{ render_metadata(comment.metadata) }}{% endif -%}
+{% if comment.reactions %}- Reactions:
+{{ render_reactions(comment.reactions) | indent(2, true) }}{% endif %}
+
+{{ render_markdown_block(comment.body) | indent(2, true) }}
+
+{% for reply in comment.replies %}
+{{ render_comment(reply) }}
+{% endfor %}
+{% endmacro %}
+
+{% macro render_review(review) %}
+{% if review.author %}
+{{ render_heading(3, "Review by " ~ render_actor(review.author)) }}
+{% else %}
+{{ render_heading(3, "Review by unknown") }}
+{% endif %}
+
+{{ render_common_metadata(review) -}}
+{{ render_field("ID", review.id) -}}
+{{ render_field("State", review.state) -}}
+{{ render_field("Submitted", review.submitted_at) -}}
+{{ render_field("Commit", review.commit_id) -}}
+
+{{ render_markdown_block(review.body) | indent(2, true) }}
+
+{% endmacro %}
+
+{% macro render_review_comment(comment) %}
+{% if comment.author %}
+{{ render_heading(4, "Review Comment by " ~ render_actor(comment.author)) }}
+{% else %}
+{{ render_heading(4, "Review Comment by unknown") }}
+{% endif %}
+
+{{ render_common_metadata(comment) -}}
+{{ render_field("Path", comment.path) -}}
+{{ render_field("Line", comment.line) -}}
+{{ render_field("Start line", comment.start_line) -}}
+{{ render_field("Reply to", comment.in_reply_to) -}}
+{{ render_field("Review", comment.review_id) -}}
+{% if comment.reactions %}- Reactions:
+{{ render_reactions(comment.reactions) | indent(2, true) }}
+{% endif %}{% if comment.diff_hunk %}- Diff:
+{{ render_diff_block(comment.diff_hunk) | indent(2, true) }}
+{% endif %}{% if comment.body %}- Body:
+{{ render_markdown_block(comment.body) | indent(2, true) }}
+{% endif %}
+
+{% endmacro %}
+
+{% macro render_review_thread(thread) %}
+{{ render_heading(3, "Thread " ~ thread.ordinal) }}
+- ID: {{ thread.id }}
+{% if thread.path %}- Path: {{ thread.path }}
+{% endif %}{% if thread.is_resolved is not none %}- Resolved: {{ thread.is_resolved }}
+{% endif %}{% if thread.is_outdated is not none %}- Outdated: {{ thread.is_outdated }}
+{% endif %}
+
+{% for comment in thread.comments %}
+{{ render_review_comment(comment) }}
+{% endfor %}
+{% endmacro %}
+
+{% macro render_timeline_entry(entry) -%}
+{{ render_heading(3, entry.event_type) }}
+{{ render_field("Created", entry.created_at) -}}
+{% if entry.actor -%}
+- Actor: {{ render_actor(entry.actor) }}
+{% endif -%}
+{% if entry.commit_author -%}
+{{ render_field("Author", (entry.commit_author.name ~ " <" ~ entry.commit_author.email ~ ">") if (entry.commit_author.name and entry.commit_author.email) else (entry.commit_author.name or entry.commit_author.email or entry.commit_author.login)) -}}
+{% endif -%}
+{% if entry.details -%}
+{{ render_metadata(entry.details) -}}
+{% endif -%}
+{% if entry.body is not none -%}
+- Body:
+{{ render_markdown_block(entry.body) | indent(2, true) }}
+{% endif %}
+
+{%- endmacro %}
+
+{% macro render_file(file) %}
+{{ render_heading(3, "`" ~ file.path ~ "`") }}
+- Status: {{ file.status }} (`+{{ file.additions }}` `-{{ file.deletions }}` total `{{ file.changes }}`)
+{{ render_field("Previous path", file.previous_path) -}}
+{{ render_field("URL", file.blob_url) -}}
+{% if file.patch %}- Diff:
+{{ render_diff_block(file.patch) | indent(2, true) }}
+{% endif %}
+{% endmacro %}
+
+{% macro render_commit(commit) %}
+{{ render_heading(3, "`" ~ commit.sha ~ "`") }}
+{{ render_field("URL", commit.url) -}}
+{{ render_field("Hash", commit.sha) -}}
+{{ render_field("Author", commit.author_name) -}}
+{{ render_field("Authored At", commit.authored_at) -}}
+{% if commit.author_user %}- GitHub author: {{ render_actor(commit.author_user) }}{% endif %}
+{% if commit.message %}- Commit Message:
+{{ render_fenced_block(commit.message) }}
+{% endif %}
+
+{% endmacro %}
+
+{% macro render_raw_payload(payload) %}
+<details>
+<summary>{{ payload.name }}</summary>
+
+{% if payload.request_urls %}
+{{ render_heading(3, "Request URLs" ~ ((" (" ~ payload.request_count ~ " requests, " ~ payload.request_urls|length ~ " unique endpoint" ~ ("s" if payload.request_urls|length > 1 else "") ~ ")") if payload.request_count > payload.request_urls|length else "")) }}
+{% for request_url in payload.request_urls -%}
+- {{ request_url }}
+{% endfor %}
+
+{% endif %}
+{% if payload.graphql_requests %}
+{{ render_heading(3, "GraphQL Requests") }}
+{% for request in payload.graphql_requests %}
+{{ render_heading(4, "Request " ~ loop.index) }}
+
+{{ render_fenced_block(request.query, "graphql") }}
+
+{{ render_fenced_block(request.variables|tojson(indent=2), "json") }}
+
+{% endfor %}
+{% endif %}
+{{ render_fenced_block(payload.payload|tojson(indent=2), "json") }}
+</details>
+{%- endmacro %}
+
+{{ render_heading(1, render_kind_label(kind) ~ " #" ~ number ~ ": " ~ title) }}
+- Repository: {{ owner }}/{{ repo }}
+{{ render_field("URL", url) -}}
+{{ render_field("State", state) -}}
+{% if author %}- Author: {{ render_actor(author) }}
+{% endif %}{{ render_field("Author association", author_association) -}}
+{{ render_field("Created", created_at) -}}
+{{ render_field("Updated", updated_at) -}}
+{{ render_field("Closed", closed_at) -}}
+
+{% if metadata %}
+{{ render_heading(2, "Metadata") }}
+{{ render_metadata(metadata) }}
+{% endif %}
+
+{{ render_heading(2, "Body") }}
+{{ render_markdown_block(body) | indent(2, true) }}
+{% if labels %}
+{{ render_heading(2, "Labels") }}
+{% for label in labels -%}
+- `{{ label.name }}`{% if label.color %} (`#{{ label.color }}`){% endif %}{% if label.description %}: {{ label.description }}{% endif %}
+{% endfor %}
+{% endif %}
+
+{% if assignees %}
+{{ render_heading(2, "Assignees") }}
+{% for actor in assignees -%}
+- {{ render_actor(actor) }}
+{% endfor %}
+{% endif %}
+
+{% if requested_reviewers %}
+{{ render_heading(2, "Requested Reviewers") }}
+{% for actor in requested_reviewers -%}
+- {{ render_actor(actor) }}
+{% endfor %}
+{% endif %}
+
+{% if milestone %}
+{{ render_heading(2, "Milestone") }}
+- Title: {{ milestone.title }}
+{{ render_field("State", milestone.state) -}}
+{{ render_field("Due", milestone.due_on) -}}
+{{ render_field("URL", milestone.url) -}}
+{% endif %}
+
+{% if reactions %}
+{{ render_heading(2, "Reactions") }}
+{{ render_reactions(reactions) }}
+{% endif %}
+
+{% if comments %}
+{{ render_heading(2, "Comments (" ~ counts.comments ~ ")") }}
+{% for comment in comments %}
+{{ render_comment(comment) }}
+{% endfor %}
+{% endif %}
+
+{% if reviews %}
+{{ render_heading(2, "Reviews (" ~ counts.reviews ~ ")") }}
+{% for review in reviews %}
+{{ render_review(review) }}
+{% endfor %}
+{% endif %}
+
+{% if review_threads %}
+{{ render_heading(2, "Review Threads (" ~ counts.review_threads ~ ")") }}
+{% for thread in review_threads %}
+{{ render_review_thread(thread) }}
+{% endfor %}
+{% endif %}
+
+{% if timeline %}
+{{ render_heading(2, "Timeline (" ~ counts.timeline ~ ")") }}
+{% for entry in timeline %}
+{{ render_timeline_entry(entry) }}
+{% endfor %}
+{% endif %}
+
+{% if files %}
+{{ render_heading(2, "Files (" ~ counts.files ~ ")") }}
+{% for file in files %}
+{{ render_file(file) }}
+{% endfor %}
+{% endif %}
+
+{% if commits %}
+{{ render_heading(2, "Commits (" ~ counts.commits ~ ")") }}
+{% for commit in commits %}
+{{ render_commit(commit) }}
+{% endfor %}
+{% endif %}
+
+{% if raw_payloads %}
+{{ render_heading(2, "Raw API Payloads") }}
+{% for payload in raw_payloads %}
+{{ render_raw_payload(payload) }}
+{% endfor %}
+{% endif %}

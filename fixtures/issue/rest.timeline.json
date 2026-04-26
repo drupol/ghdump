@@ -1,0 +1,20 @@
+[
+  {
+    "event": "labeled",
+    "actor": {
+      "login": "triager",
+      "html_url": "https://github.com/triager"
+    },
+    "created_at": "2026-01-01T12:30:00Z",
+    "submitted_at": null,
+    "body": null,
+    "state": null,
+    "label": {
+      "name": "bug"
+    },
+    "commit_id": null,
+    "rename": null,
+    "source": null,
+    "reviewed": null
+  }
+]

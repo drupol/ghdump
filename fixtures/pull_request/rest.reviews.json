@@ -1,0 +1,15 @@
+[
+  {
+    "id": 42,
+    "html_url": "https://github.com/acme/widgets/pull/11#pullrequestreview-42",
+    "body": "Looks good to me.",
+    "state": "APPROVED",
+    "user": {
+      "login": "reviewer",
+      "html_url": "https://github.com/reviewer"
+    },
+    "author_association": "COLLABORATOR",
+    "submitted_at": "2026-02-10T11:30:00Z",
+    "commit_id": "ccccdddd"
+  }
+]

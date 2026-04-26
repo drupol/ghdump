@@ -1,0 +1,18 @@
+[
+  {
+    "event": "reviewed",
+    "actor": {
+      "login": "reviewer",
+      "html_url": "https://github.com/reviewer"
+    },
+    "created_at": null,
+    "submitted_at": "2026-02-10T11:30:00Z",
+    "body": null,
+    "state": null,
+    "label": null,
+    "commit_id": null,
+    "rename": null,
+    "source": null,
+    "reviewed": "approved"
+  }
+]

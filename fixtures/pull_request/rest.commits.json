@@ -1,0 +1,17 @@
+[
+  {
+    "sha": "ccccdddd",
+    "html_url": "https://github.com/acme/widgets/commit/ccccdddd",
+    "author": {
+      "login": "pr-author",
+      "html_url": "https://github.com/pr-author"
+    },
+    "commit": {
+      "message": "Support offline fixtures",
+      "author": {
+        "name": "PR Author",
+        "date": "2026-02-10T09:30:00Z"
+      }
+    }
+  }
+]
