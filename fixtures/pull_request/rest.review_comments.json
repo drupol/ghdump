@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1001,
+    "html_url": "https://github.com/acme/widgets/pull/11#discussion_r1001",
+    "body": "Support offline fixtures here too.",
+    "user": {
+      "login": "reviewer",
+      "html_url": "https://github.com/reviewer"
+    },
+    "author_association": "COLLABORATOR",
+    "created_at": "2026-02-10T11:31:00Z",
+    "updated_at": "2026-02-10T11:32:00Z",
+    "path": "src/parser.rs",
+    "line": 27,
+    "start_line": null,
+    "diff_hunk": "@@ -20,6 +20,7 @@ fn parse() {\n+    load_fixture();\n }",
+    "in_reply_to_id": null,
+    "pull_request_review_id": 42,
+    "reactions": {
+      "+1": 1,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    }
+  },
+  {
+    "id": 1002,
+    "html_url": "https://github.com/acme/widgets/pull/11#discussion_r1002",
+    "body": "Added in the follow-up commit.",
+    "user": {
+      "login": "pr-author",
+      "html_url": "https://github.com/pr-author"
+    },
+    "author_association": "MEMBER",
+    "created_at": "2026-02-10T11:40:00Z",
+    "updated_at": "2026-02-10T11:41:00Z",
+    "path": "src/parser.rs",
+    "line": 27,
+    "start_line": null,
+    "diff_hunk": "@@ -20,6 +20,7 @@ fn parse() {\n+    load_fixture();\n }",
+    "in_reply_to_id": 1001,
+    "pull_request_review_id": 42,
+    "reactions": {
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 1
+    }
+  }
+]

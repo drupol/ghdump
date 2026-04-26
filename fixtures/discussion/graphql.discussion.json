@@ -1,0 +1,118 @@
+{
+  "id": "D_kwDOExample329",
+  "number": 329,
+  "title": "Fixture discussion",
+  "url": "https://github.com/acme/widgets/discussions/329",
+  "body": "Can we support offline tests?",
+  "createdAt": "2026-03-01T09:00:00Z",
+  "updatedAt": "2026-03-01T10:00:00Z",
+  "closed": false,
+  "closedAt": null,
+  "locked": false,
+  "author": {
+    "login": "discussion-author",
+    "url": "https://github.com/discussion-author"
+  },
+  "authorAssociation": "MEMBER",
+  "category": {
+    "name": "Ideas",
+    "slug": "ideas"
+  },
+  "answerChosenAt": "2026-03-01T12:00:00Z",
+  "answerChosenBy": {
+    "login": "maintainer",
+    "url": "https://github.com/maintainer"
+  },
+  "labels": {
+    "nodes": [
+      {
+        "name": "discussion",
+        "color": "c5def5",
+        "description": "Discussion topic"
+      }
+    ]
+  },
+  "reactionGroups": [
+    {
+      "content": "THUMBS_UP",
+      "users": {
+        "totalCount": 2
+      }
+    },
+    {
+      "content": "HEART",
+      "users": {
+        "totalCount": 1
+      }
+    }
+  ],
+  "comments": {
+    "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": null
+    },
+    "nodes": [
+      {
+        "id": "DC_kwDOExample329_1",
+        "url": "https://github.com/acme/widgets/discussions/329#discussioncomment-1",
+        "body": "Top-level discussion comment",
+        "createdAt": "2026-03-01T10:30:00Z",
+        "updatedAt": "2026-03-01T10:45:00Z",
+        "publishedAt": "2026-03-01T10:30:00Z",
+        "author": {
+          "login": "commenter",
+          "url": "https://github.com/commenter"
+        },
+        "authorAssociation": "CONTRIBUTOR",
+        "isAnswer": true,
+        "upvoteCount": 4,
+        "reactionGroups": [
+          {
+            "content": "HOORAY",
+            "users": {
+              "totalCount": 1
+            }
+          }
+        ],
+        "replies": {
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": [
+            {
+              "id": "DC_kwDOExample329_2",
+              "url": "https://github.com/acme/widgets/discussions/329#discussioncomment-2",
+              "body": "Nested reply",
+              "createdAt": "2026-03-01T11:00:00Z",
+              "updatedAt": "2026-03-01T11:05:00Z",
+              "publishedAt": "2026-03-01T11:00:00Z",
+              "author": {
+                "login": "reply-user",
+                "url": "https://github.com/reply-user"
+              },
+              "authorAssociation": "NONE",
+              "isAnswer": false,
+              "upvoteCount": 1,
+              "reactionGroups": [
+                {
+                  "content": "EYES",
+                  "users": {
+                    "totalCount": 1
+                  }
+                }
+              ],
+              "replies": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

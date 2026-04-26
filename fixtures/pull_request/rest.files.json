@@ -1,0 +1,12 @@
+[
+  {
+    "filename": "src/parser.rs",
+    "status": "modified",
+    "additions": 12,
+    "deletions": 4,
+    "changes": 16,
+    "previous_filename": null,
+    "blob_url": "https://github.com/acme/widgets/blob/ccccdddd/src/parser.rs",
+    "patch": "@@ -20,6 +20,7 @@ fn parse() {\n+    load_fixture();\n }"
+  }
+]
