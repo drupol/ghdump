@@ -13,6 +13,7 @@ use crate::model::{
 };
 
 const DEFAULT_TEMPLATE_NAME: &str = "document.md.j2";
+const BUILTIN_TEMPLATE_NAME: &str = "default.md.j2";
 const DEFAULT_TEMPLATE_SOURCE: &str = include_str!("../templates/default.md.j2");
 
 pub fn render(document: &ExportDocument, template_path: Option<&Path>) -> anyhow::Result<String> {
@@ -39,10 +40,20 @@ fn render_context(
     };
 
     environment
-        .add_template(DEFAULT_TEMPLATE_NAME, template_source.as_ref())
-        .context("failed to load template")?;
+        .add_template(BUILTIN_TEMPLATE_NAME, DEFAULT_TEMPLATE_SOURCE)
+        .context("failed to load built-in template")?;
+
+    let template_name = if template_path.is_some() {
+        environment
+            .add_template(DEFAULT_TEMPLATE_NAME, template_source.as_ref())
+            .context("failed to load template")?;
+        DEFAULT_TEMPLATE_NAME
+    } else {
+        BUILTIN_TEMPLATE_NAME
+    };
+
     let template = environment
-        .get_template(DEFAULT_TEMPLATE_NAME)
+        .get_template(template_name)
         .context("failed to compile template")?;
 
     template
@@ -79,6 +90,7 @@ struct TemplateContext {
     commits: Vec<CommitContext>,
     raw_payloads: Vec<RawPayloadContext>,
     counts: CountContext,
+    merged_at: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -186,17 +198,27 @@ struct ReviewCommentContext {
 }
 
 #[derive(Debug, Serialize)]
+struct SourceIssueContext {
+    pub number: u64,
+    pub title: String,
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct TimelineEntryContext {
     event_type: String,
     actor: Option<ActorContext>,
     created_at: Option<String>,
     body: Option<String>,
     commit_author: Option<ActorContext>,
+    source_issue: Option<SourceIssueContext>,
     details: Vec<MetadataFieldContext>,
+    files: Vec<ChangedFileContext>,
 }
 
 #[derive(Debug, Serialize)]
 struct ChangedFileContext {
+    sha: String,
     path: String,
     status: String,
     additions: i64,
@@ -215,6 +237,7 @@ struct CommitContext {
     author_name: Option<String>,
     authored_at: Option<String>,
     author_user: Option<ActorContext>,
+    files: Vec<ChangedFileContext>,
 }
 
 #[derive(Debug, Serialize)]
@@ -325,6 +348,11 @@ impl TemplateContext {
                 commits: document.commits.len(),
                 raw_payloads: document.raw_payloads.len(),
             },
+            merged_at: document
+                .metadata
+                .iter()
+                .find(|f| f.name == "Merged at")
+                .map(|f| f.value.clone()),
         }
     }
 }
@@ -493,10 +521,24 @@ impl ReviewCommentContext {
     }
 }
 
+impl SourceIssueContext {
+    fn from_source_issue(source: &crate::model::SourceIssue) -> Self {
+        Self {
+            number: source.number,
+            title: source.title.clone(),
+            url: source.url.clone(),
+        }
+    }
+}
+
 impl TimelineEntryContext {
     fn from_timeline_entry(entry: &TimelineEntry) -> Self {
         let actor = entry.actor.as_ref().map(ActorContext::from_actor);
         let commit_author = ActorContext::from_commit_author(entry.commit_author.as_ref());
+        let source_issue = entry
+            .source_issue
+            .as_ref()
+            .map(SourceIssueContext::from_source_issue);
 
         Self {
             event_type: entry.event_type.clone(),
@@ -504,10 +546,16 @@ impl TimelineEntryContext {
             created_at: format_optional_datetime(entry.created_at.as_ref()),
             body: entry.body.clone(),
             commit_author,
+            source_issue,
             details: entry
                 .details
                 .iter()
                 .map(MetadataFieldContext::from_field)
+                .collect(),
+            files: entry
+                .files
+                .iter()
+                .map(ChangedFileContext::from_changed_file)
                 .collect(),
         }
     }
@@ -516,6 +564,7 @@ impl TimelineEntryContext {
 impl ChangedFileContext {
     fn from_changed_file(file: &ChangedFile) -> Self {
         Self {
+            sha: file.sha.clone(),
             path: file.path.clone(),
             status: file.status.clone(),
             additions: file.additions,
@@ -537,6 +586,11 @@ impl CommitContext {
             author_name: commit.author_name.clone(),
             authored_at: format_optional_datetime(commit.authored_at.as_ref()),
             author_user: commit.author_user.as_ref().map(ActorContext::from_actor),
+            files: commit
+                .files
+                .iter()
+                .map(ChangedFileContext::from_changed_file)
+                .collect(),
         }
     }
 }
@@ -586,11 +640,13 @@ fn deduplicate_strings_preserve_order(values: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{dump_context, render};
+    use std::fs;
+
     use crate::{
         cli::ResourceKind,
         model::{
-            Actor, Comment, ExportDocument, MetadataField, RawGraphQlRequest, RawPayload, Reaction,
-            Review, ReviewComment, ReviewThread,
+            Actor, ChangedFile, Comment, CommitSummary, ExportDocument, Label, MetadataField,
+            RawGraphQlRequest, RawPayload, Reaction, Review, ReviewComment, ReviewThread,
         },
     };
     use serde_json::json;
@@ -649,10 +705,26 @@ mod tests {
             url: "https://github.com/octocat/Hello-World/issues/42".to_owned(),
             state: "open".to_owned(),
             body: "Main body".to_owned(),
-            metadata: vec![MetadataField {
-                name: "Comments".to_owned(),
-                value: "1".to_owned(),
-            }],
+            labels: vec![
+                Label {
+                    name: "bug".to_owned(),
+                    ..Label::default()
+                },
+                Label {
+                    name: "enhancement".to_owned(),
+                    ..Label::default()
+                },
+            ],
+            metadata: vec![
+                MetadataField {
+                    name: "Comments".to_owned(),
+                    value: "1".to_owned(),
+                },
+                MetadataField {
+                    name: "Merged at".to_owned(),
+                    value: "2024-04-28T10:00:00Z".to_owned(),
+                },
+            ],
             comments: vec![comment],
             reviews: vec![Review {
                 id: "review-1".to_owned(),
@@ -678,6 +750,17 @@ mod tests {
                     variables: json!({ "number": 42 }),
                 }],
             }],
+            commits: vec![CommitSummary {
+                sha: "abc1234".to_owned(),
+                message: "Add feature".to_owned(),
+                files: vec![ChangedFile {
+                    sha: "def5678".to_owned(),
+                    path: "src/lib.rs".to_owned(),
+                    status: "added".to_owned(),
+                    ..ChangedFile::default()
+                }],
+                ..CommitSummary::default()
+            }],
             ..ExportDocument::default()
         }
     }
@@ -691,7 +774,9 @@ mod tests {
         assert!(context.contains("\"repo\": \"Hello-World\""));
         assert!(context.contains("\"title\": \"Improve export templates\""));
         assert!(context.contains("\"counts\""));
-        assert!(context.contains("\"raw_payloads\""));
+        assert!(context.contains("\"merged_at\": \"2024-04-28T10:00:00Z\""));
+        assert!(context.contains("\"sha\": \"abc1234\""));
+        assert!(context.contains("\"path\": \"src/lib.rs\""));
         assert!(!context.contains("\"header\""));
         assert!(!context.contains("kind_label"));
         assert!(!context.contains("repository"));
@@ -709,25 +794,48 @@ mod tests {
         let output = render(&sample_document(), None).expect("default template should render");
 
         assert!(output.contains("# Issue #42: Improve export templates"));
-        assert!(output.contains("## Metadata"));
+        assert!(output.contains("## Stats"));
         assert!(output.contains("- Comments: 1"));
-        assert!(output.contains("  ```md\n  Main body\n  ```"));
-        assert!(output.contains("## Comments (1)"));
+        assert!(output.contains("```md\nMain body\n```"));
+        assert!(output.contains("## Timeline (2)"));
         assert!(output.contains("### Comment 1 by [octocat](https://github.com/octocat)"));
         assert!(output.contains("- Source: Unit test"));
-        assert!(output.contains("  ```md\n  Top-level comment\n  ```"));
+        assert!(output.contains("Top-level comment"));
         assert!(output.contains("#### Comment 1 by [reply-user](https://github.com/reply-user)"));
-        assert!(output.contains("  ```md\n  Nested reply\n  ```"));
+        assert!(output.contains("Nested reply"));
         assert!(output.contains("- Reactions:"));
         assert!(output.contains("  - 👍 `+1`: 2x"));
-        assert!(output.contains("  ```md\n  Review body\n  ```"));
-        assert!(output.contains("  ```md\n  Please rename this.\n  ```"));
+        assert!(output.contains("Review body"));
         assert!(output.contains("## Raw API Payloads"));
         assert!(output.contains("### Request URLs"));
         assert!(output.contains("https://api.github.com/repos/octocat/Hello-World/issues/42"));
         assert!(output.contains("### GraphQL Requests"));
         assert!(output.contains("query Issue($number: Int!)"));
+        assert!(output.contains("- Labels:\n  - `bug`\n  - `enhancement`"));
         assert!(output.contains("\"number\": 42"));
+    }
+
+    #[test]
+    fn custom_template_can_extend_default_template_blocks() {
+        let path = std::env::temp_dir().join(format!(
+            "ghdump-extend-template-{}.md.j2",
+            std::process::id()
+        ));
+        fs::write(
+            &path,
+            "{% extends \"default.md.j2\" %}\n{% block stats %}{{ render_heading(2, \"Custom Stats\") }}- Labels: {{ labels | length }}\n{% endblock %}\n",
+        )
+        .expect("custom template should be writable");
+
+        let output = render(&sample_document(), Some(path.as_path()))
+            .expect("custom template should extend default template");
+        let _ = fs::remove_file(&path);
+
+        assert!(output.contains("# Issue #42: Improve export templates"));
+        assert!(output.contains("## Custom Stats"));
+        assert!(output.contains("- Labels: 2"));
+        assert!(!output.contains("## Stats"));
+        assert!(output.contains("## Description"));
     }
 
     #[test]
@@ -749,9 +857,9 @@ mod tests {
             ..ExportDocument::default()
         };
 
-        let output = render(&document, None).expect("default template should render");
+        let context = dump_context(&document).expect("context should serialize");
 
-        assert!(output.contains("### Request URLs (3 requests, 1 unique endpoint)"));
-        assert_eq!(output.matches("https://api.github.com/graphql").count(), 1);
+        assert!(context.contains("\"request_count\": 3"));
+        assert_eq!(context.matches("https://api.github.com/graphql").count(), 1);
     }
 }

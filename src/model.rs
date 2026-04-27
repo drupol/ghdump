@@ -92,13 +92,22 @@ pub struct ReviewThread {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct SourceIssue {
+    pub number: u64,
+    pub title: String,
+    pub url: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct TimelineEntry {
     pub event_type: String,
     pub actor: Option<Actor>,
     pub created_at: Option<DateTime<Utc>>,
     pub body: Option<String>,
     pub commit_author: Option<CommitAuthor>,
+    pub source_issue: Option<SourceIssue>,
     pub details: Vec<MetadataField>,
+    pub files: Vec<ChangedFile>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -109,6 +118,7 @@ pub struct CommitAuthor {
 
 #[derive(Clone, Debug, Default)]
 pub struct ChangedFile {
+    pub sha: String,
     pub path: String,
     pub status: String,
     pub additions: i64,
@@ -127,6 +137,7 @@ pub struct CommitSummary {
     pub author_name: Option<String>,
     pub authored_at: Option<DateTime<Utc>>,
     pub author_user: Option<Actor>,
+    pub files: Vec<ChangedFile>,
 }
 
 #[derive(Clone, Debug, Default)]

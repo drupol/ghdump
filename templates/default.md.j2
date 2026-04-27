@@ -1,309 +1,418 @@
-{% set reaction_emojis = {
+{%- set reaction_emojis = {
     "+1": "👍", "-1": "👎", "laugh": "😄", "hooray": "🎉",
     "confused": "😕", "heart": "❤️", "rocket": "🚀", "eyes": "👀"
-} %}
+} -%}
+{%- set kind_labels = {
+    "issue": "Issue",
+    "pull-request": "Pull Request",
+    "discussion": "Discussion"
+} -%}
 
-{% macro render_field(name, value) -%}
-{% if value is not none and value != "" -%}
-- {{ name }}: {{ value }}
-{% endif -%}
-{% endmacro %}
+{%- macro render_field(name, value, key=none, wrap="", depth=0) -%}
+{%- set val = value[key] if key is not none else value -%}
+{%- if val is defined and val is not none and (val is not string or val | trim) -%}
+{%- if val is iterable and val is not string -%}
+{%- if val | length > 0 -%}
+{%- if name -%}{{ "  " * depth }}- {{ name }}:{{ "\n" }}{%- endif -%}
+{%- for item in val -%}{{ render_field(none, item, wrap=wrap, depth=depth + (1 if name else 0)) }}{%- endfor -%}
+{%- endif -%}
+{%- else -%}
+{{ "  " * depth }}- {{ (name ~ ": ") if name }}{{ wrap }}{{ val | replace("\n", "\n" ~ ("  " * depth)) }}{{ wrap }}{{ "\n" -}}
+{%- endif -%}
+{%- endif -%}
+{%- endmacro -%}
 
-{% macro render_metadata(fields) -%}
-{% for field in fields -%}
-{{- render_field(field.name, field.value) -}}
-{% endfor -%}
-{%- endmacro %}
+{%- macro render_metadata(fields) -%}
+{%- for field in fields -%}{{ render_field(field.name, field.value, key=field.key|default(none), wrap=field.wrap|default("")) }}{%- endfor -%}
+{%- endmacro -%}
 
-{% macro render_actor(actor) -%}
-{% if actor.url %}[{{ actor.login }}]({{ actor.url }}){% else %}{{ actor.login }}{% endif %}
-{%- endmacro %}
+{%- macro render_actor(actor) -%}
+{%- if actor -%}
+{%- if actor.url -%}[{{ actor.login }}]({{ actor.url }}){%- else -%}{{ actor.login }}{%- endif -%}
+{%- else -%}
+unknown
+{%- endif -%}
+{%- endmacro -%}
 
-{% macro render_kind_label(kind) -%}
-{% if kind == "issue" %}Issue{% elif kind == "pull-request" %}Pull Request{% elif kind == "discussion" %}Discussion{% else %}{{ kind }}{% endif %}
-{%- endmacro %}
+{%- macro render_kind_label(kind) -%}
+{{- kind_labels[kind] if kind in kind_labels else kind -}}
+{%- endmacro -%}
 
-{% macro render_reaction_emoji(content) -%}
-{{ reaction_emojis[content] if content in reaction_emojis else "" }}
-{%- endmacro %}
+{%- macro render_reaction_emoji(content) -%}
+{{- reaction_emojis[content] if content in reaction_emojis else "" -}}
+{%- endmacro -%}
 
-{% macro render_heading(level, text) %}
-{{ "#" * level }} {{ text }}
-{% endmacro %}
+{%- macro render_heading(level, text) -%}
+{{ "#" * level }} {{ text }}{{ "\n\n" -}}
+{%- endmacro -%}
 
-{% macro render_common_metadata(entry) -%}
-{{ render_field("URL", entry.url) -}}
-{{ render_field("Created", entry.created_at) -}}
-{{ render_field("Updated", entry.updated_at) -}}
-{{ render_field("Author association", entry.author_association) -}}
-{%- endmacro %}
+{%- macro render_common_metadata(entry) -%}
+{%- set fields = [] -%}
+{%- if entry.url %}{% set fields = fields + [dict(name="URL", value=entry.url)] %}{% endif -%}
+{%- if entry.created_at %}{% set fields = fields + [dict(name="Created", value=entry.created_at)] %}{% endif -%}
+{%- if entry.updated_at %}{% set fields = fields + [dict(name="Updated", value=entry.updated_at)] %}{% endif -%}
+{%- if entry.author_association %}{% set fields = fields + [dict(name="Author association", value="`" ~ entry.author_association ~ "`")] %}{% endif -%}
+{%- if entry.is_answer %}{% set fields = fields + [dict(name="Marked answer", value="Yes")] %}{% endif -%}
+{{- render_metadata(fields) -}}
+{%- endmacro -%}
 
-{% macro render_reactions(reactions) -%}
-{% for reaction in reactions -%}
-- {% set emoji = reaction_emojis[reaction.content] if reaction.content in reaction_emojis else "" -%}
+{%- macro render_reaction_item(reaction) -%}
+{%- set emoji = render_reaction_emoji(reaction.content) -%}
 {{ (emoji ~ " ") if emoji }}`{{ reaction.content }}`: {{ reaction.count }}x by
-{% for user in reaction.users -%}
-{{ "  - " ~ render_actor(user) }}
-{% endfor -%}
-{% if reaction.count > reaction.users|length -%}
-{{ "  - (+" ~ (reaction.count - reaction.users|length) ~ " more)" }}
-{% endif -%}
-{% endfor -%}
-{%- endmacro %}
+{%- for user in reaction.users %}
+  - {{ render_actor(user) }}
+{%- endfor -%}
+{%- if reaction.count > reaction.users|length %}
+  - (+{{ reaction.count - reaction.users|length }} more)
+{%- endif -%}
+{%- endmacro -%}
 
-{% macro render_fenced_block(content, language="") %}
+{%- macro render_reactions(reactions) -%}
+{%- for reaction in reactions -%}- {{ render_reaction_item(reaction) | trim }}{{ "\n" }}{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro render_label(label) -%}
+`{{ label.name }}`{% if label.color %} (`#{{ label.color }}`){% endif %}{% if label.description %}: {{ label.description }}{% endif %}
+{%- endmacro -%}
+
+{%- macro render_fenced_block(content, language="") -%}
 {%- if content is not none and (content | trim) -%}
 ```{% if language %}{{ language }}{% endif %}
 {{ content }}
 ```
-{%- endif -%}
-{% endmacro %}
+{{ "\n" }}{% endif -%}
+{%- endmacro -%}
 
-{% macro render_markdown_block(body) %}
+{%- macro render_markdown_block(body) -%}
 {{- render_fenced_block(body, "md") -}}
-{% endmacro %}
+{%- endmacro -%}
 
-{% macro render_diff_block(diff_text) %}
-{{- render_fenced_block(diff_text, "diff") -}}
-{% endmacro %}
+{%- macro render_diff_block(diff_text, summary="View Diff") -%}
+<details>
+<summary>{{ summary }}</summary>
 
-{% macro render_comment(comment) %}
-{% if comment.author %}
-{{ render_heading(comment.level, "Comment " ~ comment.ordinal ~ " by " ~ render_actor(comment.author)) }}
-{% else %}
-{{ render_heading(comment.level, "Comment " ~ comment.ordinal ~ " by unknown") }}
-{% endif %}
+{{ render_fenced_block(diff_text, "diff") -}}
 
+</details>
+{%- endmacro -%}
+
+{%- macro render_comment(comment) -%}
+{{ render_heading(comment.level, "Comment " ~ comment.ordinal ~ " by " ~ render_actor(comment.author)) -}}
 {{ render_common_metadata(comment) -}}
-{{ render_field("Marked answer", comment.is_answer if comment.is_answer else None) -}}
-{% if comment.metadata %}{{ render_metadata(comment.metadata) }}{% endif -%}
-{% if comment.reactions %}- Reactions:
-{{ render_reactions(comment.reactions) | indent(2, true) }}{% endif %}
-
-{{ render_markdown_block(comment.body) | indent(2, true) }}
-
-{% for reply in comment.replies %}
-{{ render_comment(reply) }}
-{% endfor %}
-{% endmacro %}
-
-{% macro render_review(review) %}
-{% if review.author %}
-{{ render_heading(3, "Review by " ~ render_actor(review.author)) }}
-{% else %}
-{{ render_heading(3, "Review by unknown") }}
-{% endif %}
-
-{{ render_common_metadata(review) -}}
-{{ render_field("ID", review.id) -}}
-{{ render_field("State", review.state) -}}
-{{ render_field("Submitted", review.submitted_at) -}}
-{{ render_field("Commit", review.commit_id) -}}
-
-{{ render_markdown_block(review.body) | indent(2, true) }}
-
-{% endmacro %}
-
-{% macro render_review_comment(comment) %}
-{% if comment.author %}
-{{ render_heading(4, "Review Comment by " ~ render_actor(comment.author)) }}
-{% else %}
-{{ render_heading(4, "Review Comment by unknown") }}
-{% endif %}
-
-{{ render_common_metadata(comment) -}}
-{{ render_field("Path", comment.path) -}}
-{{ render_field("Line", comment.line) -}}
-{{ render_field("Start line", comment.start_line) -}}
-{{ render_field("Reply to", comment.in_reply_to) -}}
-{{ render_field("Review", comment.review_id) -}}
-{% if comment.reactions %}- Reactions:
+{%- if comment.metadata -%}
+{{ render_metadata(comment.metadata) -}}
+{%- endif -%}
+{% if comment.reactions -%}
+- Reactions:
 {{ render_reactions(comment.reactions) | indent(2, true) }}
-{% endif %}{% if comment.diff_hunk %}- Diff:
-{{ render_diff_block(comment.diff_hunk) | indent(2, true) }}
-{% endif %}{% if comment.body %}- Body:
-{{ render_markdown_block(comment.body) | indent(2, true) }}
 {% endif %}
-
-{% endmacro %}
-
-{% macro render_review_thread(thread) %}
-{{ render_heading(3, "Thread " ~ thread.ordinal) }}
-- ID: {{ thread.id }}
-{% if thread.path %}- Path: {{ thread.path }}
-{% endif %}{% if thread.is_resolved is not none %}- Resolved: {{ thread.is_resolved }}
-{% endif %}{% if thread.is_outdated is not none %}- Outdated: {{ thread.is_outdated }}
-{% endif %}
-
-{% for comment in thread.comments %}
-{{ render_review_comment(comment) }}
-{% endfor %}
-{% endmacro %}
-
-{% macro render_timeline_entry(entry) -%}
-{{ render_heading(3, entry.event_type) }}
-{{ render_field("Created", entry.created_at) -}}
-{% if entry.actor -%}
-- Actor: {{ render_actor(entry.actor) }}
+{%- if comment.body -%}
+- Body:
+{{ render_markdown_block(comment.body | trim) | indent(2, true) }}
 {% endif -%}
-{% if entry.commit_author -%}
+{%- for reply in comment.replies -%}
+{{ render_comment(reply) -}}
+{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro render_review(review, all_threads=[]) -%}
+{{ render_heading(3, "Review by " ~ render_actor(review.author)) -}}
+{{ render_common_metadata(review) -}}
+{{ render_field("State", review, "state") -}}
+{{ render_field("Submitted", review, "submitted_at") -}}
+{{ render_markdown_block(review.body) | indent(2, true) }}
+{%- for thread in all_threads -%}
+{%- set ns = namespace(has_match=false, first_comment=none) -%}
+{%- for comment in thread.comments -%}
+{%- if comment.review_id == review.id -%}
+{%- set ns.has_match = true -%}
+{%- if ns.first_comment is none %}{% set ns.first_comment = comment %}{% endif -%}
+{%- endif -%}
+{%- endfor -%}
+{%- if ns.has_match -%}
+---
+
+{{ render_heading(4, "Review thread on `" ~ (thread.path if thread.path else "unknown file") ~ "` by " ~ render_actor(ns.first_comment.author)) -}}
+{%- for comment in thread.comments -%}
+{%- if comment.review_id == review.id -%}
+{{ render_review_comment(comment) -}}
+{%- endif -%}
+{%- endfor -%}
+{%- endif -%}
+{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro render_review_comment(comment, show_heading=true) -%}
+{%- if show_heading -%}
+{{ render_heading(5, "Review Comment by " ~ render_actor(comment.author)) -}}
+{%- endif -%}
+{{ render_common_metadata(comment) -}}
+{{ render_field("Path", comment, "path", "`") -}}
+{{ render_field("Line", comment, "line") -}}
+{{ render_field("Review", comment, "review_id") -}}
+{% if comment.reactions -%}
+- Reactions:
+{{ render_reactions(comment.reactions) | indent(2, true) }}
+{% endif -%}
+{% if comment.diff_hunk -%}
+- Diff:
+{{ render_diff_block(comment.diff_hunk, comment.path if comment.path else "View Diff") | indent(2, true) -}}
+{% endif -%}
+{% if comment.body %}
+- Body:
+{{ render_markdown_block(comment.body | trim) | indent(2, true) }}
+{% endif -%}
+{%- endmacro -%}
+
+{%- macro render_review_thread(thread) -%}
+{{ render_heading(3, "Thread " ~ thread.ordinal) -}}
+{{ render_field("ID", thread, "id") -}}
+{{ render_field("Path", thread, "path", "`") -}}
+{{ render_field("Resolved", thread, "is_resolved") -}}
+{{ render_field("Outdated", thread, "is_outdated") -}}
+{%- for comment in thread.comments -%}
+{{ render_review_comment(comment) -}}
+{%- endfor -%}
+{%- endmacro -%}
+
+{%- macro render_timeline_entry(entry, all_files=[], owner="", repo="") -%}
+{{ render_heading(3, entry.event_type | replace("_", " ") | capitalize) -}}
+{{ render_field("Created", entry, "created_at") -}}
+{{ render_field("Actor", render_actor(entry.actor) if entry.actor else none) -}}
 {{ render_field("Author", (entry.commit_author.name ~ " <" ~ entry.commit_author.email ~ ">") if (entry.commit_author.name and entry.commit_author.email) else (entry.commit_author.name or entry.commit_author.email or entry.commit_author.login)) -}}
-{% endif -%}
-{% if entry.details -%}
-{{ render_metadata(entry.details) -}}
-{% endif -%}
+{{ render_field("Source issue", ("[#" ~ entry.source_issue.number ~ " " ~ entry.source_issue.title ~ "](" ~ entry.source_issue.url ~ ")") if (entry.source_issue and entry.source_issue.url) else ("#" ~ entry.source_issue.number ~ " " ~ entry.source_issue.title) if entry.source_issue else none) -}}
+{%- set commit_ns = namespace(sha=none, url=none) -%}
+{%- if entry.event_type == "committed" -%}
+{%- for detail in entry.details -%}
+{%- if detail.name == "Commit" -%}{%- set commit_ns.sha = detail.value -%}{%- endif -%}
+{%- endfor -%}
+{%- if commit_ns.sha and owner and repo -%}
+{%- set commit_ns.url = "https://github.com/" ~ owner ~ "/" ~ repo ~ "/commit/" ~ commit_ns.sha -%}
+{%- endif -%}
+{%- endif -%}
+{%- if entry.details -%}
+{%- for detail in entry.details -%}
+{%- if entry.event_type == "committed" and detail.name == "Commit" and commit_ns.url -%}
+{{ render_field(detail.name, "[" ~ detail.value ~ "](" ~ commit_ns.url ~ ")") }}
+{%- else -%}
+{{ render_field(detail.name, detail.value) }}
+{%- endif -%}
+{%- endfor -%}
+{%- endif -%}
 {% if entry.body is not none -%}
 - Body:
-{{ render_markdown_block(entry.body) | indent(2, true) }}
-{% endif %}
-
-{%- endmacro %}
-
-{% macro render_file(file) %}
-{{ render_heading(3, "`" ~ file.path ~ "`") }}
-- Status: {{ file.status }} (`+{{ file.additions }}` `-{{ file.deletions }}` total `{{ file.changes }}`)
-{{ render_field("Previous path", file.previous_path) -}}
+{{ render_markdown_block(entry.body) | trim | indent(2, true) }}
+{% endif -%}
+{%- if commit_ns.sha -%}
+  {%- set ns = namespace(matching_files=[]) -%}
+  {%- for file in all_files -%}
+    {%- if file.sha == commit_ns.sha or (file.blob_url and commit_ns.sha in file.blob_url) -%}
+      {%- set ns.matching_files = ns.matching_files + [file] -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {%- if ns.matching_files -%}
+- Diff:
+{% for file in ns.matching_files -%}
+{{ render_diff_block(file.patch, file.path) | indent(2, true) }}
+{% endfor -%}
+  {%- endif -%}
+{%- endif -%}
+{%- endmacro -%}
+{%- macro render_file(file) -%}
+{{ render_heading(3, "`" ~ file.path ~ "`") -}}
+{{ render_field("Status", file.status ~ " (`+" ~ file.additions ~ "` `-" ~ file.deletions ~ "` total `" ~ file.changes ~ "`)") -}}
+{{ render_field("Previous path", file.previous_path, wrap="`") -}}
 {{ render_field("URL", file.blob_url) -}}
-{% if file.patch %}- Diff:
-{{ render_diff_block(file.patch) | indent(2, true) }}
-{% endif %}
-{% endmacro %}
-
-{% macro render_commit(commit) %}
-{{ render_heading(3, "`" ~ commit.sha ~ "`") }}
+{%- if file.patch -%}
+- Diff:
+{{ render_diff_block(file.patch, file.path) | indent(2, true) }}
+{%- endif -%}
+{%- endmacro -%}
+{%- macro render_commit(commit) -%}
+{{ render_heading(3, "`" ~ commit.sha ~ "`") -}}
 {{ render_field("URL", commit.url) -}}
 {{ render_field("Hash", commit.sha) -}}
 {{ render_field("Author", commit.author_name) -}}
-{{ render_field("Authored At", commit.authored_at) -}}
-{% if commit.author_user %}- GitHub author: {{ render_actor(commit.author_user) }}{% endif %}
-{% if commit.message %}- Commit Message:
-{{ render_fenced_block(commit.message) }}
-{% endif %}
+{{ render_field("Date", commit.authored_at) -}}
+- Message:
+{{ render_markdown_block(commit.message) | indent(2, true) }}
+{%- if commit.files -%}
+- Files:
+{%- for file in commit.files %}
+  - `{{ file.path }}` (+{{ file.additions }}, -{{ file.deletions }}):
+{{ render_diff_block(file.patch, file.path) | indent(4, true) }}
+{%- endfor -%}
+{%- endif -%}
+{%- endmacro -%}
 
-{% endmacro %}
-
-{% macro render_raw_payload(payload) %}
+{%- macro render_raw_payload(payload) -%}
 <details>
 <summary>{{ payload.name }}</summary>
 
-{% if payload.request_urls %}
-{{ render_heading(3, "Request URLs" ~ ((" (" ~ payload.request_count ~ " requests, " ~ payload.request_urls|length ~ " unique endpoint" ~ ("s" if payload.request_urls|length > 1 else "") ~ ")") if payload.request_count > payload.request_urls|length else "")) }}
+{% if payload.request_urls -%}
+{{ render_heading(3, "Request URLs" ~ ((" (" ~ payload.request_count ~ " requests, " ~ payload.request_urls|length ~ " unique endpoint" ~ ("s" if payload.request_urls|length > 1 else "") ~ ")") if payload.request_count > payload.request_urls|length else "")) -}}
 {% for request_url in payload.request_urls -%}
 - {{ request_url }}
-{% endfor %}
-
-{% endif %}
-{% if payload.graphql_requests %}
-{{ render_heading(3, "GraphQL Requests") }}
-{% for request in payload.graphql_requests %}
-{{ render_heading(4, "Request " ~ loop.index) }}
-
-{{ render_fenced_block(request.query, "graphql") }}
-
-{{ render_fenced_block(request.variables|tojson(indent=2), "json") }}
-
-{% endfor %}
-{% endif %}
-{{ render_fenced_block(payload.payload|tojson(indent=2), "json") }}
+{% endfor -%}
+{% endif -%}
+{% if payload.graphql_requests -%}
+{{ render_heading(3, "GraphQL Requests") -}}
+{% for request in payload.graphql_requests -%}
+{{ render_heading(4, "Request " ~ loop.index) -}}
+{{ render_fenced_block(request.query, "graphql") | indent(2, true) }}
+{{ render_fenced_block(request.variables|tojson(indent=2), "json") | indent(2, true) }}
+{% endfor -%}
+{% endif -%}
+{{ render_fenced_block(payload.payload|tojson(indent=2), "json") | indent(2, true) }}
 </details>
-{%- endmacro %}
+{%- endmacro -%}
 
-{{ render_heading(1, render_kind_label(kind) ~ " #" ~ number ~ ": " ~ title) }}
-- Repository: {{ owner }}/{{ repo }}
-{{ render_field("URL", url) -}}
-{{ render_field("State", state) -}}
-{% if author %}- Author: {{ render_actor(author) }}
-{% endif %}{{ render_field("Author association", author_association) -}}
-{{ render_field("Created", created_at) -}}
-{{ render_field("Updated", updated_at) -}}
-{{ render_field("Closed", closed_at) -}}
+{% block document -%}
+{% block header -%}
+{{ render_heading(1, render_kind_label(kind) ~ " #" ~ number ~ ": " ~ title) -}}
+{%- endblock %}
 
-{% if metadata %}
-{{ render_heading(2, "Metadata") }}
-{{ render_metadata(metadata) }}
-{% endif %}
+{% block metadata -%}
+{%- set reaction_list = [] -%}
+{%- if reactions | length > 0 -%}
+  {%- set ns = namespace(items=[]) -%}
+  {%- for r in reactions -%}
+    {%- set item -%}{{ render_reaction_item(r) }}{%- endset -%}
+    {%- set ns.items = ns.items + [item | trim] -%}
+  {%- endfor -%}
+  {%- set reaction_list = ns.items -%}
+{%- endif -%}
 
-{{ render_heading(2, "Body") }}
-{{ render_markdown_block(body) | indent(2, true) }}
-{% if labels %}
-{{ render_heading(2, "Labels") }}
+{%- set label_list = [] -%}
+{%- if labels | length > 0 -%}
+  {%- set ns = namespace(items=[]) -%}
+  {%- for label in labels -%}
+    {%- set item -%}{{ render_label(label) }}{%- endset -%}
+    {%- set ns.items = ns.items + [item | trim] -%}
+  {%- endfor -%}
+  {%- set label_list = ns.items -%}
+{%- endif -%}
+
+{%- set requested_reviewer_list = [] -%}
+{%- if requested_reviewers | length > 0 -%}
+  {%- set ns = namespace(items=[]) -%}
+  {%- for reviewer in requested_reviewers -%}
+    {%- set item -%}{{ render_actor(reviewer) }}{%- endset -%}
+    {%- set ns.items = ns.items + [item | trim] -%}
+  {%- endfor -%}
+  {%- set requested_reviewer_list = ns.items -%}
+{%- endif -%}
+
+{%- set fields = [
+    {"name": "Repository", "value": owner ~ "/" ~ repo},
+    {"name": "URL", "value": "[" ~ url ~ "](" ~ url ~ ")"},
+    {"name": "State", "value": state},
+    {"name": "Author", "value": render_actor(author)},
+    {"name": "Author association", "value": author_association, "wrap": "`"},
+    {"name": "Created", "value": created_at},
+    {"name": "Updated", "value": updated_at},
+    {"name": "Closed", "value": closed_at},
+    {"name": "Merged", "value": merged_at},
+    {"name": "Requested reviewers", "value": requested_reviewer_list},
+    {"name": "Labels", "value": label_list},
+    {"name": "Assignees", "value": assignees | map(attribute="login") | list},
+    {"name": "Milestone", "value": milestone, "key": "title"},
+    {"name": "Reactions", "value": reaction_list}
+] -%}
+
+{{ render_metadata(fields) }}{{ "\n" -}}
+{%- endblock %}
+
+{% block stats -%}
+{{ render_heading(2, "Stats") -}}
+{{ render_field("Comments", counts, "comments") -}}
+{{ render_field("Reviews", counts, "reviews") -}}
+{{ render_field("Review threads", counts, "review_threads") -}}
+{{ render_field("Timeline items", counts, "timeline") -}}
+{{ render_field("Labels", labels | length) -}}
+{{ render_field("Files", counts, "files") -}}
+{{ render_field("Commits", counts, "commits") }}{{ "\n" -}}
+{%- endblock %}
+
+{% block description -%}
+{{ render_heading(2, "Description") -}}
+{{ render_markdown_block(body | trim) }}
+{%- endblock %}
+
+{% block milestone -%}
+{%- if milestone -%}
+{{ render_heading(2, "Milestone") -}}
+- {{ milestone.title }}
+{%- endif -%}
+{%- endblock %}
+
+{% block labels -%}
+{%- if labels -%}
+{{ render_heading(2, "Labels") -}}
 {% for label in labels -%}
-- `{{ label.name }}`{% if label.color %} (`#{{ label.color }}`){% endif %}{% if label.description %}: {{ label.description }}{% endif %}
-{% endfor %}
-{% endif %}
+- {{ render_label(label) }}
+{% endfor -%}
+{{ "\n" -}}
+{%- endif -%}
+{%- endblock %}
 
-{% if assignees %}
-{{ render_heading(2, "Assignees") }}
-{% for actor in assignees -%}
-- {{ render_actor(actor) }}
-{% endfor %}
-{% endif %}
+{% block files -%}
+{%- if files -%}
+{{ render_heading(2, "Files (" ~ files|length ~ ")") -}}
+{% for file in files -%}
+{{ render_file(file) -}}
+{%- endfor -%}
+{%- endif -%}
+{%- endblock %}
 
-{% if requested_reviewers %}
-{{ render_heading(2, "Requested Reviewers") }}
-{% for actor in requested_reviewers -%}
-- {{ render_actor(actor) }}
-{% endfor %}
-{% endif %}
+{% block commits -%}
+{%- if commits -%}
+{{ render_heading(2, "Commits (" ~ commits|length ~ ")") -}}
+{% for commit in commits -%}
+{{ render_commit(commit) -}}
+{%- endfor -%}
+{%- endif -%}
+{%- endblock %}
 
-{% if milestone %}
-{{ render_heading(2, "Milestone") }}
-- Title: {{ milestone.title }}
-{{ render_field("State", milestone.state) -}}
-{{ render_field("Due", milestone.due_on) -}}
-{{ render_field("URL", milestone.url) -}}
-{% endif %}
+{% block timeline -%}
+{%- set timeline_ns = namespace(items=[]) -%}
 
-{% if reactions %}
-{{ render_heading(2, "Reactions") }}
-{{ render_reactions(reactions) }}
-{% endif %}
+{%- for c in comments -%}
+  {%- set timeline_ns.items = timeline_ns.items + [dict(time=c.created_at, kind="comment", data=c)] -%}
+{%- endfor -%}
 
-{% if comments %}
-{{ render_heading(2, "Comments (" ~ counts.comments ~ ")") }}
-{% for comment in comments %}
-{{ render_comment(comment) }}
-{% endfor %}
-{% endif %}
+{%- for r in reviews -%}
+  {%- set timeline_ns.items = timeline_ns.items + [dict(time=r.submitted_at, kind="review", data=r)] -%}
+{%- endfor -%}
 
-{% if reviews %}
-{{ render_heading(2, "Reviews (" ~ counts.reviews ~ ")") }}
-{% for review in reviews %}
-{{ render_review(review) }}
-{% endfor %}
-{% endif %}
+{%- for e in timeline -%}
+  {# Filter out events that are rendered with rich objects. #}
+  {%- if e.event_type not in ["commented", "reviewed", "commit-commented"] -%}
+    {%- set timeline_ns.items = timeline_ns.items + [dict(time=e.created_at, kind="event", data=e)] -%}
+  {%- endif -%}
+{%- endfor -%}
 
-{% if review_threads %}
-{{ render_heading(2, "Review Threads (" ~ counts.review_threads ~ ")") }}
-{% for thread in review_threads %}
-{{ render_review_thread(thread) }}
-{% endfor %}
-{% endif %}
+{%- if timeline_ns.items -%}
+{{ "\n\n" -}}
+{{ render_heading(2, "Timeline (" ~ timeline_ns.items|length ~ ")") -}}
+{%- for item in timeline_ns.items | sort(attribute="time") -%}
+{%- if item.kind == "comment" -%}
+{{ render_comment(item.data) }}{{ "\n" -}}
+{%- elif item.kind == "review" -%}
+{{ render_review(item.data, review_threads) }}{{ "\n" -}}
+{%- elif item.kind == "event" -%}
+{{ render_timeline_entry(item.data, files, owner, repo) }}{{ "\n" -}}
+{%- endif -%}
+{%- endfor -%}
+{%- endif -%}
+{%- endblock %}
 
-{% if timeline %}
-{{ render_heading(2, "Timeline (" ~ counts.timeline ~ ")") }}
-{% for entry in timeline %}
-{{ render_timeline_entry(entry) }}
-{% endfor %}
-{% endif %}
-
-{% if files %}
-{{ render_heading(2, "Files (" ~ counts.files ~ ")") }}
-{% for file in files %}
-{{ render_file(file) }}
-{% endfor %}
-{% endif %}
-
-{% if commits %}
-{{ render_heading(2, "Commits (" ~ counts.commits ~ ")") }}
-{% for commit in commits %}
-{{ render_commit(commit) }}
-{% endfor %}
-{% endif %}
-
-{% if raw_payloads %}
-{{ render_heading(2, "Raw API Payloads") }}
-{% for payload in raw_payloads %}
-{{ render_raw_payload(payload) }}
-{% endfor %}
-{% endif %}
+{% block raw_payloads -%}
+{%- if raw_payloads -%}
+{{ render_heading(2, "Raw API Payloads") -}}
+{% for payload in raw_payloads -%}
+{{ render_raw_payload(payload) }}{{ "\n" -}}
+{%- endfor -%}
+{%- endif -%}
+{%- endblock %}
+{%- endblock %}

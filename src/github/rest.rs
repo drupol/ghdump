@@ -92,6 +92,7 @@ pub struct RestTimelineRename {
 pub struct RestTimelineSourceIssue {
     pub number: u64,
     pub title: String,
+    pub html_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -196,6 +197,7 @@ pub struct RestPullRequestComment {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RestPullRequestFile {
+    pub sha: String,
     pub filename: String,
     pub status: String,
     pub additions: i64,
@@ -224,4 +226,5 @@ pub struct RestCommit {
     pub html_url: Option<String>,
     pub author: Option<RestActor>,
     pub commit: RestGitCommit,
+    pub files: Option<Vec<RestPullRequestFile>>,
 }

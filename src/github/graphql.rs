@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
@@ -9,7 +11,9 @@ use crate::model::{
     ReviewComment, ReviewThread,
 };
 
-use super::{GitHubClient, RestPullRequestFile, to_changed_file as to_changed_file_rest};
+use super::{
+    GitHubClient, RestPullRequestFile, rest::RestReaction, to_changed_file as to_changed_file_rest,
+};
 
 pub(crate) struct DiscussionFetcher<'a> {
     client: &'a GitHubClient,
@@ -362,6 +366,41 @@ impl<'a> IssueGraphQlFetcher<'a> {
             });
         }
 
+        let mut rendered_comments = Vec::with_capacity(comments.len());
+        let mut reaction_request_urls = Vec::new();
+
+        for comment in &comments {
+            let mut rendered = to_comment(comment.clone());
+
+            if let Some(comment_id) = issue_comment_id_from_url(&comment.url) {
+                match self
+                    .fetch_issue_comment_reactions(owner, repo, comment_id)
+                    .await
+                {
+                    Ok((reactions, urls)) => {
+                        rendered.reactions = reactions;
+                        reaction_request_urls.extend(urls);
+                    }
+                    Err(error) => metadata.push(MetadataField {
+                        name: "Reaction enrichment".to_owned(),
+                        value: format!("issue comment {} reactions skipped: {error:#}", comment_id),
+                    }),
+                }
+            } else {
+                metadata.push(MetadataField {
+                name: "Reaction enrichment".to_owned(),
+                value: format!(
+                  "issue comment {} reactions skipped: failed to parse numeric comment id from URL",
+                  comment.id
+                ),
+              });
+            }
+
+            rendered_comments.push(rendered);
+        }
+
+        request_urls.extend(reaction_request_urls);
+
         let raw_payloads = vec![
             RawPayload {
                 name: "graphql.issue".to_owned(),
@@ -408,10 +447,22 @@ impl<'a> IssueGraphQlFetcher<'a> {
                 url: Some(m.url),
             }),
             metadata,
-            comments: comments.into_iter().map(to_comment).collect(),
+            comments: rendered_comments,
             raw_payloads,
             ..ExportDocument::default()
         })
+    }
+
+    async fn fetch_issue_comment_reactions(
+        &self,
+        owner: &str,
+        repo: &str,
+        comment_id: u64,
+    ) -> anyhow::Result<(Vec<Reaction>, Vec<String>)> {
+        let path = format!("repos/{owner}/{repo}/issues/comments/{comment_id}/reactions");
+        let (reactions, request_urls): (Vec<RestReaction>, Vec<String>) =
+            self.client.get_rest_paginated_with_urls(&path).await?;
+        Ok((aggregate_rest_reactions(reactions), request_urls))
     }
 }
 
@@ -480,7 +531,7 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
 
         let mut review_threads = Vec::new();
         let mut thread_futures = futures::stream::iter(pull.review_threads.nodes.clone())
-            .map(|thread| async move { self.expand_review_thread(thread).await })
+            .map(|thread| async move { self.expand_review_thread(thread, owner, repo).await })
             .buffered(5);
 
         while let Some(result) = thread_futures.next().await {
@@ -562,6 +613,58 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             });
         }
 
+        let mut rendered_comments = Vec::with_capacity(comments.len());
+        let mut reaction_request_urls = Vec::new();
+
+        for comment in comments {
+            let mut rendered = to_comment(comment.clone());
+
+            if let Some(comment_id) = issue_comment_id_from_url(&comment.url) {
+                match self
+                    .fetch_issue_comment_reactions(owner, repo, comment_id)
+                    .await
+                {
+                    Ok((reactions, urls)) => {
+                        rendered.reactions = reactions;
+                        reaction_request_urls.extend(urls);
+                    }
+                    Err(error) => metadata.push(MetadataField {
+                        name: "Reaction enrichment".to_owned(),
+                        value: format!("issue comment {} reactions skipped: {error:#}", comment_id),
+                    }),
+                }
+            } else {
+                metadata.push(MetadataField {
+              name: "Reaction enrichment".to_owned(),
+              value: format!(
+                "issue comment {} reactions skipped: failed to parse numeric comment id from URL",
+                comment.id
+              ),
+            });
+            }
+
+            rendered_comments.push(rendered);
+        }
+
+        let reactions = match self.fetch_pull_request_reactions(owner, repo, number).await {
+            Ok((reactions, urls)) => {
+                reaction_request_urls.extend(urls);
+                reactions
+            }
+            Err(error) => {
+                metadata.push(MetadataField {
+                    name: "Reaction enrichment".to_owned(),
+                    value: format!(
+                        "pull request #{} top-level reactions skipped: {error:#}",
+                        number
+                    ),
+                });
+                to_reactions(pull.reaction_groups.as_deref())
+            }
+        };
+
+        request_urls.extend(reaction_request_urls);
+
         let (rest_files, file_request_urls): (Vec<RestPullRequestFile>, Vec<String>) = self
             .client
             .get_rest_paginated_with_urls(&format!("repos/{owner}/{repo}/pulls/{number}/files"))
@@ -608,7 +711,7 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
                     _ => None,
                 })
                 .collect(),
-            reactions: to_reactions(pull.reaction_groups.as_deref()),
+            reactions,
             milestone: pull.milestone.map(|m| crate::model::Milestone {
                 title: m.title,
                 state: Some(m.state.to_lowercase()),
@@ -616,7 +719,7 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
                 url: Some(m.url),
             }),
             metadata,
-            comments: comments.into_iter().map(to_comment).collect(),
+            comments: rendered_comments,
             reviews: pull.reviews.nodes.into_iter().map(to_review).collect(),
             review_threads,
             files: rest_files.iter().map(to_changed_file_rest).collect(),
@@ -681,7 +784,7 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             response_pages.push(serde_json::to_value(&pull_request.review_threads.nodes)?);
 
             let mut thread_futures = futures::stream::iter(pull_request.review_threads.nodes)
-                .map(|thread| async move { self.expand_review_thread(thread).await })
+                .map(|thread| async move { self.expand_review_thread(thread, owner, repo).await })
                 .buffered(5);
 
             while let Some(result) = thread_futures.next().await {
@@ -703,6 +806,8 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
     async fn expand_review_thread(
         &self,
         mut thread: GraphQlReviewThread,
+        owner: &str,
+        repo: &str,
     ) -> anyhow::Result<(ReviewThread, Vec<String>, Vec<RawGraphQlRequest>)> {
         let mut request_urls = Vec::new();
         let mut graphql_requests = Vec::new();
@@ -733,17 +838,69 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
 
         thread.comments.nodes.clear();
 
+        let mut rendered_comments = Vec::with_capacity(comments.len());
+        for comment in comments {
+            let mut rendered = to_review_comment(comment.clone());
+
+            if let Some(comment_id) = review_comment_id_from_url(&comment.url)
+                && let Ok((reactions, urls)) = self
+                    .fetch_review_comment_reactions(owner, repo, comment_id)
+                    .await
+            {
+                rendered.reactions = reactions;
+                request_urls.extend(urls);
+            }
+
+            rendered_comments.push(rendered);
+        }
+
         Ok((
             ReviewThread {
                 id: thread.id,
                 path: thread.path,
                 is_resolved: Some(thread.is_resolved),
                 is_outdated: Some(thread.is_outdated),
-                comments: comments.into_iter().map(to_review_comment).collect(),
+                comments: rendered_comments,
             },
             request_urls,
             graphql_requests,
         ))
+    }
+
+    async fn fetch_review_comment_reactions(
+        &self,
+        owner: &str,
+        repo: &str,
+        comment_id: u64,
+    ) -> anyhow::Result<(Vec<Reaction>, Vec<String>)> {
+        let path = format!("repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions");
+        let (reactions, request_urls): (Vec<RestReaction>, Vec<String>) =
+            self.client.get_rest_paginated_with_urls(&path).await?;
+        Ok((aggregate_rest_reactions(reactions), request_urls))
+    }
+
+    async fn fetch_issue_comment_reactions(
+        &self,
+        owner: &str,
+        repo: &str,
+        comment_id: u64,
+    ) -> anyhow::Result<(Vec<Reaction>, Vec<String>)> {
+        let path = format!("repos/{owner}/{repo}/issues/comments/{comment_id}/reactions");
+        let (reactions, request_urls): (Vec<RestReaction>, Vec<String>) =
+            self.client.get_rest_paginated_with_urls(&path).await?;
+        Ok((aggregate_rest_reactions(reactions), request_urls))
+    }
+
+    async fn fetch_pull_request_reactions(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+    ) -> anyhow::Result<(Vec<Reaction>, Vec<String>)> {
+        let path = format!("repos/{owner}/{repo}/issues/{number}/reactions");
+        let (reactions, request_urls): (Vec<RestReaction>, Vec<String>) =
+            self.client.get_rest_paginated_with_urls(&path).await?;
+        Ok((aggregate_rest_reactions(reactions), request_urls))
     }
 }
 
@@ -1266,6 +1423,72 @@ fn to_reactions(groups: Option<&[GraphQlReactionGroup]>) -> Vec<Reaction> {
     normalized
 }
 
+fn issue_comment_id_from_url(url: &str) -> Option<u64> {
+    url.rsplit('-').next()?.parse().ok()
+}
+
+fn review_comment_id_from_url(url: &str) -> Option<u64> {
+    if let Some((_, suffix)) = url.split_once("#discussion_r") {
+        return suffix.parse().ok();
+    }
+    url.chars()
+        .rev()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect::<String>()
+        .parse()
+        .ok()
+}
+
+fn aggregate_rest_reactions(reactions: Vec<RestReaction>) -> Vec<Reaction> {
+    let mut grouped_users: HashMap<String, Vec<Actor>> = HashMap::new();
+    let mut grouped_counts: HashMap<String, u64> = HashMap::new();
+
+    for reaction in reactions {
+        *grouped_counts.entry(reaction.content.clone()).or_insert(0) += 1;
+
+        let entry = grouped_users.entry(reaction.content).or_default();
+        if let Some(user) = reaction.user {
+            let actor = Actor {
+                login: user.login,
+                url: user.html_url,
+            };
+            if !entry.iter().any(|existing| existing.login == actor.login) {
+                entry.push(actor);
+            }
+        }
+    }
+
+    let mut aggregated = Vec::new();
+    for content in [
+        "+1", "-1", "laugh", "hooray", "confused", "heart", "rocket", "eyes",
+    ] {
+        if let Some(count) = grouped_counts.remove(content) {
+            let users = grouped_users.remove(content).unwrap_or_default();
+            aggregated.push(Reaction {
+                content: content.to_owned(),
+                count,
+                users,
+            });
+        }
+    }
+
+    let mut remaining = grouped_counts.into_iter().collect::<Vec<_>>();
+    remaining.sort_by(|left, right| left.0.cmp(&right.0));
+    aggregated.extend(remaining.into_iter().map(|(content, count)| {
+        let users = grouped_users.remove(&content).unwrap_or_default();
+        Reaction {
+            content,
+            count,
+            users,
+        }
+    }));
+
+    aggregated
+}
+
 fn normalize_graphql_reaction_content(content: &str) -> &str {
     match content {
         "THUMBS_UP" => "+1",
@@ -1348,6 +1571,7 @@ fn to_commit_summary(commit: GraphQlFullCommit) -> crate::model::CommitSummary {
         author_name: Some(commit.author.name),
         authored_at: commit.author.date,
         author_user: commit.author.user.map(to_actor),
+        files: Vec::new(),
     }
 }
 
@@ -1793,7 +2017,7 @@ mod tests {
         assert!(markdown.contains("# Discussion #329: Fixture discussion"));
         assert!(markdown.contains("- 👍 `+1`: 2x"));
         assert!(markdown.contains("- ❤️ `heart`: 1x"));
-        assert!(markdown.contains("- Marked answer: true"));
+        assert!(markdown.contains("- Marked answer: Yes"));
         assert!(markdown.contains("#### Comment 1 by [reply-user](https://github.com/reply-user)"));
     }
 }

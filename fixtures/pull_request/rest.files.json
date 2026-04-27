@@ -1,5 +1,6 @@
 [
   {
+    "sha": "ccccdddd11112222333344445555666677778888",
     "filename": "src/parser.rs",
     "status": "modified",
     "additions": 12,

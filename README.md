@@ -1,5 +1,7 @@
-![GitHub stars][github stars]
-[![Donate!][donate github]][5]
+![GitHub stars][GitHub stars]
+[![Crates.io Version][Crates.io Version]][ghdump crates]
+[![Crates.io License][Crates.io License]][ghdump crates]
+[![Donate!][Donate!]][sponsor link]
 
 # ghdump
 
@@ -8,9 +10,9 @@
 The tool expects a GitHub URL as its only argument and detects the resource type automatically from that URL.
 By default it renders Markdown, but the same context can also be rendered as plain text, YAML, TOML, or JSON through an appropriate template.
 
-The template format is based on [MiniJinja] and the default template is stored in `templates/default.md.j2`. The exported context includes all the data returned by the GitHub REST and GraphQL APIs, as well as some additional metadata about the export process itself.
+The template format is based on [MiniJinja] and the default template is stored in `templates/default.md.j2`. The exported context includes normalized data fetched from the GitHub REST and GraphQL APIs, plus raw payloads and export metadata.
 
-The user is free to design their own templates. A default template is included in the repository as an exhaustive reference that demonstrates the full available context (comments, reviews, reactions, metadata, raw payloads, and more).
+The user is free to design their own templates. A default template is included in the repository as an exhaustive reference that demonstrates the available context (comments, reviews, reactions, metadata, raw payloads, and more).
 
 For day-to-day use, it is recommended to create your own template focused on your specific workflow, rather than using the default template as-is.
 
@@ -90,11 +92,69 @@ Export a discussion explicitly:
 GITHUB_TOKEN=... ghdump https://github.com/owner/repo/discussions/789
 ```
 
+## Custom Templates
+
+Templates are rendered with [MiniJinja]. A custom template can either be standalone or extend the built-in Markdown template.
+
+### Standalone template
+
+Standalone templates receive the full context documented below:
+
+```jinja
+# {{ owner }}/{{ repo }} #{{ number }}: {{ title }}
+
+State: {{ state }}
+Author: {% if author %}{{ author.login }}{% else %}unknown{% endif %}
+Labels: {{ labels | length }}
+```
+
+Use it with:
+
+```sh
+ghdump https://github.com/owner/repo/pull/456 \
+  --template ./my-template.md.j2 \
+  --output pr-456.md
+```
+
+### Extending the default template
+
+The [built-in Markdown template (`default.md.j2`)][builtin template] is available to custom templates. This lets you override one section while reusing the rest:
+
+```jinja
+{% extends "default.md.j2" %}
+
+{% block stats %}
+## Custom Stats
+
+- Comments: {{ counts.comments }}
+- Labels: {{ labels | length }}
+- Files: {{ counts.files }}
+{% endblock %}
+```
+
+The default template currently exposes these blocks:
+
+- `document`: the whole rendered document.
+- `header`: the top `# ...` heading.
+- `metadata`: repository, URL, state, author, reviewers, labels, reactions, and related top-level metadata.
+- `stats`: count summary.
+- `description`: issue, pull request, or discussion body.
+- `milestone`: milestone section.
+- `labels`: expanded labels section.
+- `files`: changed files section.
+- `commits`: commits section.
+- `timeline`: chronological timeline rendered from comments, reviews, and timeline events.
+- `raw_payloads`: raw REST and GraphQL payloads.
+
+Blocks can use the same variables and helper macros as the default template, such as `render_heading`, `render_field`, `render_actor`, `render_label`, `render_markdown_block`, and `render_diff_block`.
+
 ## Template Variables
 
 The template context contains the following variables (as serialized by `--dump-context`).
 
 `null` means the value is optional and not always present depending on the resource type or API response.
+
+Array counts can be computed directly in templates with MiniJinja's `length` filter, for example `{{ labels | length }}`.
 
 <details>
 
@@ -113,6 +173,7 @@ The template context contains the following variables (as serialized by `--dump-
 - **created_at** (RFC 3339 string or `null`)
 - **updated_at** (RFC 3339 string or `null`)
 - **closed_at** (RFC 3339 string or `null`)
+- **merged_at** (RFC 3339 string or `null`)
 - **labels** (array of label objects)
 - **assignees** (array of actor objects)
 - **requested_reviewers** (array of actor objects)
@@ -158,6 +219,11 @@ The template context contains the following variables (as serialized by `--dump-
   - **title** (string)
   - **state** (string or `null`)
   - **due_on** (RFC 3339 string or `null`)
+  - **url** (string or `null`)
+
+- **source-issue**:
+  - **number** (integer)
+  - **title** (string)
   - **url** (string or `null`)
 
 </details>
@@ -227,13 +293,17 @@ The template context contains the following variables (as serialized by `--dump-
 
 <summary>Timeline Events</summary>
 
+The `timeline` array contains GitHub timeline events normalized as timeline-entry objects. Top-level comments, reviews, and review threads are exposed through their own arrays. The default Markdown template merges `comments`, `reviews`, and non-duplicated `timeline` events into a single chronological section when rendering.
+
 - **timeline-entry**:
   - **event_type** (string)
   - **actor** (actor or `null`)
   - **created_at** (RFC 3339 string or `null`)
   - **body** (string or `null`)
   - **commit_author** (actor or `null`)
+  - **source_issue** (source-issue or `null`)
   - **details** (array of metadata-field)
+  - **files** (array of changed-file)
 
 </details>
 
@@ -242,6 +312,7 @@ The template context contains the following variables (as serialized by `--dump-
 <summary>Files & Commits (Pull Requests Only)</summary>
 
 - **changed-file**:
+  - **sha** (string)
   - **path** (string)
   - **status** (string)
   - **additions** (integer)
@@ -258,6 +329,7 @@ The template context contains the following variables (as serialized by `--dump-
   - **author_name** (string or `null`)
   - **authored_at** (RFC 3339 string or `null`)
   - **author_user** (actor or `null`)
+  - **files** (array of changed-file)
 
 </details>
 
@@ -286,10 +358,12 @@ The template context contains the following variables (as serialized by `--dump-
   - **comments** (integer)
   - **reviews** (integer)
   - **review_threads** (integer)
-  - **timeline** (integer)
+  - **timeline** (integer, count of entries in the raw `timeline` array)
   - **files** (integer)
   - **commits** (integer)
   - **raw_payloads** (integer)
+
+There is no separate `counts.labels` field. Use `{{ labels | length }}` in a template when you need the number of labels.
 
 </details>
 
@@ -315,8 +389,12 @@ cargo test --offline
 - Each `Raw API Payloads` block includes the actual URLs used to fetch the corresponding data, as well as the GraphQL requests when applicable.
 - The file produced by `--dump-context` matches exactly the context injected into `MiniJinja`, which makes it useful for designing and debugging templates without changing the Rust code.
 
-[github stars]: https://img.shields.io/github/stars/drupol/ghdump.svg?style=flat-square
-[donate github]: https://img.shields.io/badge/Sponsor-Github-brightgreen.svg?style=flat-square
-[5]: https://github.com/sponsors/drupol
+[GitHub stars]: https://img.shields.io/github/stars/drupol/ghdump.svg?style=flat-square
+[Donate!]: https://img.shields.io/badge/Sponsor-Github-brightgreen.svg?style=flat-square
+[sponsor link]: https://github.com/sponsors/drupol
 [`ghdump` package]: https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=ghdump
 [MiniJinja]: https://docs.rs/minijinja/
+[Crates.io License]: https://img.shields.io/crates/l/ghdump?style=flat-square
+[Crates.io Version]: https://img.shields.io/crates/v/ghdump?style=flat-square
+[ghdump crates]: https://crates.io/crates/ghdump
+[builtin template]: https://github.com/drupol/ghdump/blob/main/templates/default.md.j2

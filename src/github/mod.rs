@@ -4,6 +4,7 @@ mod rest;
 use std::collections::HashMap;
 
 use anyhow::{Context, bail};
+use futures::future::join_all;
 use reqwest::{
     Client,
     header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
@@ -256,7 +257,16 @@ impl GitHubClient {
                         .await
                     {
                         Ok((timeline, timeline_request_urls)) => {
-                            document.timeline = timeline.iter().map(to_timeline_entry).collect();
+                            let mut enriched_timeline =
+                                timeline.iter().map(to_timeline_entry).collect::<Vec<_>>();
+                            let _ = self
+                                .enrich_timeline(
+                                    &mut enriched_timeline,
+                                    &target.owner,
+                                    &target.repo,
+                                )
+                                .await;
+                            document.timeline = enriched_timeline;
                             document.raw_payloads.push(RawPayload {
                                 name: "rest.pull_request_timeline".to_owned(),
                                 payload: serde_json::to_value(&timeline)?,
@@ -274,6 +284,10 @@ impl GitHubClient {
                             });
                         }
                     }
+
+                    let _ = self
+                        .enrich_commits(&mut document.commits, &target.owner, &target.repo)
+                        .await;
 
                     return Ok(document);
                 }
@@ -376,6 +390,12 @@ impl GitHubClient {
             ..ExportDocument::default()
         };
         document.metadata.extend(issue_comment_warnings);
+        let _ = self
+            .enrich_timeline(&mut document.timeline, &target.owner, &target.repo)
+            .await;
+        let _ = self
+            .enrich_commits(&mut document.commits, &target.owner, &target.repo)
+            .await;
         let mut using_rest_review_threads = true;
 
         match self
@@ -549,6 +569,80 @@ impl GitHubClient {
         }
 
         Ok((out, request_urls))
+    }
+
+    async fn enrich_timeline(
+        &self,
+        timeline: &mut [TimelineEntry],
+        owner: &str,
+        repo: &str,
+    ) -> anyhow::Result<()> {
+        let mut futures = Vec::new();
+
+        for (i, entry) in timeline.iter().enumerate() {
+            if entry.event_type == "committed"
+                && let Some(sha) = entry
+                    .details
+                    .iter()
+                    .find(|d| d.name == "Commit")
+                    .map(|d| &d.value)
+            {
+                let url = format!("repos/{owner}/{repo}/commits/{sha}");
+                futures.push(async move {
+                    let result = self.get_rest_with_url::<RestCommit>(&url).await;
+                    (i, result)
+                });
+            }
+        }
+
+        let results = join_all(futures).await;
+
+        for (i, result) in results {
+            if let Ok((commit, _)) = result
+                && let Some(files) = commit.files
+            {
+                timeline[i].files = files.iter().map(to_changed_file).collect();
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn enrich_commits(
+        &self,
+        commits: &mut [CommitSummary],
+        owner: &str,
+        repo: &str,
+    ) -> anyhow::Result<()> {
+        let mut futures = Vec::new();
+
+        for (i, commit) in commits.iter().enumerate() {
+            let sha = &commit.sha;
+            let url = format!("repos/{owner}/{repo}/commits/{sha}");
+            futures.push(async move {
+                let result = self.get_rest_with_url::<RestCommit>(&url).await;
+                (i, result)
+            });
+        }
+
+        let results = join_all(futures).await;
+
+        for (i, result) in results {
+            match result {
+                Ok((commit, _)) => {
+                    if let Some(files) = commit.files {
+                        commits[i].files = files.iter().map(to_changed_file).collect();
+                    } else {
+                        commits[i].files = Vec::new();
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to enrich commit {}: {}", commits[i].sha, e);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     async fn graphql_query<T: serde::de::DeserializeOwned>(
@@ -1116,16 +1210,19 @@ fn to_timeline_entry(event: &RestTimelineEvent) -> TimelineEntry {
             value: commit_id.clone(),
         });
     }
+    let mut source_issue = None;
     if let Some(source) = event
         .source
         .as_ref()
         .and_then(|source| source.issue.as_ref())
     {
-        details.push(MetadataField {
-            name: "Source issue".to_owned(),
-            value: format!("#{} {}", source.number, source.title),
+        source_issue = Some(crate::model::SourceIssue {
+            number: source.number,
+            title: source.title.clone(),
+            url: source.html_url.clone(),
         });
     }
+
     if let Some(rename) = event.rename.as_ref() {
         details.push(MetadataField {
             name: "From".to_owned(),
@@ -1166,12 +1263,15 @@ fn to_timeline_entry(event: &RestTimelineEvent) -> TimelineEntry {
             name: author.name.clone(),
             email: author.email.clone(),
         }),
+        source_issue,
         details,
+        files: Vec::new(),
     }
 }
 
 pub(crate) fn to_changed_file(file: &RestPullRequestFile) -> ChangedFile {
     ChangedFile {
+        sha: file.sha.clone(),
         path: file.filename.clone(),
         status: file.status.clone(),
         additions: file.additions,
@@ -1196,6 +1296,11 @@ fn to_commit_summary(commit: &RestCommit) -> CommitSummary {
             .map(|author| author.name.clone()),
         authored_at,
         author_user: commit.author.as_ref().map(to_actor),
+        files: commit
+            .files
+            .as_ref()
+            .map(|files| files.iter().map(to_changed_file).collect())
+            .unwrap_or_default(),
     }
 }
 
@@ -1394,7 +1499,7 @@ mod tests {
             markdown
                 .contains("### Comment 1 by [issue-commenter](https://github.com/issue-commenter)")
         );
-        assert!(markdown.contains("## Timeline (1)"));
+        assert!(markdown.contains("## Timeline (2)"));
         assert!(markdown.contains("- Label: bug"));
     }
 
@@ -1452,13 +1557,24 @@ mod tests {
             template::render(&document, None).expect("pull request fixture should render");
 
         assert!(markdown.contains("# Pull Request #11: Fixture pull request"));
-        assert!(markdown.contains("## Reviews (1)"));
-        assert!(markdown.contains("## Review Threads (1)"));
+        assert!(markdown.contains("## Timeline"));
+        assert!(markdown.contains(
+            "#### Review thread on `src/parser.rs` by [reviewer](https://github.com/reviewer)"
+        ));
         assert!(
-            markdown.contains("#### Review Comment by [reviewer](https://github.com/reviewer)")
+            markdown.contains("##### Review Comment by [reviewer](https://github.com/reviewer)")
         );
         assert!(markdown.contains("### `src/parser.rs`"));
         assert!(markdown.contains("Support offline fixtures"));
+    }
+
+    #[test]
+    fn default_template_includes_review_comment_file_stats() {
+        let document = fixture_pull_request_document();
+
+        let markdown = template::render(&document, None).expect("default template should render");
+
+        assert!(markdown.contains("<summary>src/parser.rs</summary>"));
     }
 
     #[test]
