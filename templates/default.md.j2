@@ -205,11 +205,16 @@ unknown
 {% endif -%}
 {%- if commit_ns.sha -%}
   {%- set ns = namespace(matching_files=[]) -%}
-  {%- for file in all_files -%}
-    {%- if file.sha == commit_ns.sha or (file.blob_url and commit_ns.sha in file.blob_url) -%}
-      {%- set ns.matching_files = ns.matching_files + [file] -%}
-    {%- endif -%}
-  {%- endfor -%}
+  {%- if entry.files -%}
+    {%- set ns.matching_files = entry.files -%}
+  {%- endif -%}
+  {%- if not ns.matching_files -%}
+    {%- for file in all_files -%}
+      {%- if file.sha == commit_ns.sha or (file.blob_url and commit_ns.sha in file.blob_url) -%}
+        {%- set ns.matching_files = ns.matching_files + [file] -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endif -%}
   {%- if ns.matching_files -%}
 - Diff:
 {% for file in ns.matching_files -%}

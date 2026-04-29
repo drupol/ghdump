@@ -94,7 +94,7 @@ GITHUB_TOKEN=... ghdump https://github.com/owner/repo/discussions/789
 
 ## Custom Templates
 
-Templates are rendered with [MiniJinja]. A custom template can either be standalone or extend the built-in Markdown template.
+Templates are rendered with [MiniJinja]. A custom template can either be standalone or extend [built-in Markdown template (`default.md.j2`)][builtin template].
 
 ### Standalone template
 
@@ -130,6 +130,18 @@ The [built-in Markdown template (`default.md.j2`)][builtin template] is availabl
 - Labels: {{ labels | length }}
 - Files: {{ counts.files }}
 {% endblock %}
+```
+
+Or a more minimal example:
+
+```jinja
+{% extends "default.md.j2" %}
+
+{% block labels %}{% endblock %}
+{% block commits %}{% endblock %}
+{% block milestone %}{% endblock %}
+{% block files %}{% endblock %}
+{% block raw_payloads %}{% endblock %}
 ```
 
 The default template currently exposes these blocks:
