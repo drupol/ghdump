@@ -190,6 +190,9 @@ impl GitHubClient {
             created_at: Some(issue.created_at),
             updated_at: Some(issue.updated_at),
             closed_at: issue.closed_at,
+            state_reason: issue.state_reason.clone(),
+            locked: issue.locked,
+            active_lock_reason: issue.active_lock_reason.clone(),
             labels: issue.labels.iter().map(to_label).collect(),
             assignees: issue.assignees.iter().map(to_actor).collect(),
             reactions: to_reactions(issue.reactions.as_ref()),
@@ -371,6 +374,8 @@ impl GitHubClient {
             body: pull_request.body.clone().unwrap_or_default(),
             draft: pull_request.draft,
             merged_by: pull_request.merged_by.as_ref().map(to_actor),
+            merge_commit_sha: pull_request.merge_commit_sha.clone(),
+            mergeable_state: pull_request.mergeable_state.clone(),
             base: Some(BranchRef {
                 ref_name: pull_request.base.ref_field.clone(),
                 sha: Some(pull_request.base.sha.clone()),
@@ -386,6 +391,9 @@ impl GitHubClient {
             created_at: Some(pull_request.created_at),
             updated_at: Some(pull_request.updated_at),
             closed_at: pull_request.closed_at,
+            state_reason: issue.state_reason.clone(),
+            locked: issue.locked,
+            active_lock_reason: issue.active_lock_reason.clone(),
             labels: issue.labels.iter().map(to_label).collect(),
             assignees: issue.assignees.iter().map(to_actor).collect(),
             requested_reviewers: pull_request

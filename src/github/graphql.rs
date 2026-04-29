@@ -437,6 +437,9 @@ impl<'a> IssueGraphQlFetcher<'a> {
             created_at: Some(issue.created_at),
             updated_at: Some(issue.updated_at),
             closed_at: issue.closed_at,
+            state_reason: issue.state_reason,
+            locked: issue.locked,
+            active_lock_reason: issue.active_lock_reason,
             labels: issue.labels.nodes.into_iter().map(to_label).collect(),
             assignees: issue.assignees.nodes.into_iter().map(to_actor).collect(),
             reactions: to_reactions(issue.reaction_groups.as_deref()),
@@ -728,6 +731,8 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             body: pull.body,
             draft: pull.is_draft,
             merged_by: pull.merged_by.map(to_actor),
+            merge_commit_sha: pull.potential_merge_commit.as_ref().map(|c| c.oid.clone()),
+            mergeable_state: Some(pull.mergeable.to_lowercase()),
             base: Some(BranchRef {
                 ref_name: pull.base_ref_name.clone(),
                 sha: None,

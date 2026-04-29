@@ -76,6 +76,9 @@ struct TemplateContext {
     created_at: Option<String>,
     updated_at: Option<String>,
     closed_at: Option<String>,
+    state_reason: Option<String>,
+    locked: bool,
+    active_lock_reason: Option<String>,
     labels: Vec<LabelContext>,
     assignees: Vec<ActorContext>,
     requested_reviewers: Vec<ActorContext>,
@@ -92,6 +95,8 @@ struct TemplateContext {
     merged_at: Option<String>,
     merged_by: Option<ActorContext>,
     draft: bool,
+    merge_commit_sha: Option<String>,
+    mergeable_state: Option<String>,
     base: Option<BranchRefContext>,
     head: Option<BranchRefContext>,
 }
@@ -348,6 +353,8 @@ impl TemplateContext {
                 .map(|f| f.value.clone()),
             merged_by: document.merged_by.as_ref().map(ActorContext::from_actor),
             draft: document.draft,
+            merge_commit_sha: document.merge_commit_sha.clone(),
+            mergeable_state: document.mergeable_state.clone(),
             base: document
                 .base
                 .as_ref()

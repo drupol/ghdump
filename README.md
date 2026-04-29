@@ -195,9 +195,14 @@ Array counts can be computed directly in templates with MiniJinja's `length` fil
 - **created_at** (RFC 3339 string or `null`)
 - **updated_at** (RFC 3339 string or `null`)
 - **closed_at** (RFC 3339 string or `null`)
+- **state_reason** (string or `null`) — e.g. `completed`, `not_planned`, `reopened`
+- **locked** (boolean)
+- **active_lock_reason** (string or `null`)
 - **draft** (boolean)
 - **merged_at** (RFC 3339 string or `null`)
 - **merged_by** (actor object or `null`)
+- **merge_commit_sha** (string or `null`) — PR only
+- **mergeable_state** (string or `null`) — PR only, e.g. `clean`, `dirty`, `blocked`
 - **base** (branch-ref object or `null`) — PR only
 - **head** (branch-ref object or `null`) — PR only
 - **labels** (array of label objects)
