@@ -194,6 +194,8 @@ struct ReviewCommentContext {
     diff_hunk: Option<String>,
     in_reply_to: Option<String>,
     review_id: Option<String>,
+    is_minimized: Option<bool>,
+    minimized_reason: Option<String>,
     reactions: Vec<ReactionContext>,
 }
 
@@ -512,6 +514,8 @@ impl ReviewCommentContext {
             diff_hunk: comment.diff_hunk.clone(),
             in_reply_to: comment.in_reply_to.clone(),
             review_id: comment.review_id.clone(),
+            is_minimized: comment.is_minimized,
+            minimized_reason: comment.minimized_reason.clone(),
             reactions: comment
                 .reactions
                 .iter()

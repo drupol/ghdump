@@ -1064,6 +1064,8 @@ fn to_review_comment(comment: &RestPullRequestComment) -> ReviewComment {
         review_id: comment
             .pull_request_review_id
             .map(|value| value.to_string()),
+        is_minimized: None,
+        minimized_reason: None,
         reactions: to_reactions(comment.reactions.as_ref()),
     }
 }

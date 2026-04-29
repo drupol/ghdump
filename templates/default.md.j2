@@ -133,6 +133,8 @@ unknown
 ---
 
 {{ render_heading(4, "Review thread on `" ~ (thread.path if thread.path else "unknown file") ~ "` by " ~ render_actor(ns.first_comment.author)) -}}
+{{ render_field("Resolved", thread, "is_resolved") -}}
+{{ render_field("Outdated", thread, "is_outdated") -}}
 {%- for comment in thread.comments -%}
 {%- if comment.review_id == review.id -%}
 {{ render_review_comment(comment) -}}
@@ -150,6 +152,8 @@ unknown
 {{ render_field("Path", comment, "path", "`") -}}
 {{ render_field("Line", comment, "line") -}}
 {{ render_field("Review", comment, "review_id") -}}
+{{ render_field("Hidden", comment, "is_minimized") -}}
+{{ render_field("Hidden reason", comment, "minimized_reason") -}}
 {% if comment.reactions -%}
 - Reactions:
 {{ render_reactions(comment.reactions) | indent(2, true) }}

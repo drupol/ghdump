@@ -1371,6 +1371,8 @@ struct GraphQlReviewComment {
     path: Option<String>,
     line: Option<i64>,
     start_line: Option<i64>,
+    is_minimized: Option<bool>,
+    minimized_reason: Option<String>,
     reaction_groups: Option<Vec<GraphQlReactionGroup>>,
     reply_to: Option<GraphQlReviewCommentRef>,
     pull_request_review: Option<GraphQlPullRequestReviewRef>,
@@ -1529,6 +1531,8 @@ fn to_review_comment(comment: GraphQlReviewComment) -> ReviewComment {
         path: comment.path,
         line: comment.line,
         start_line: comment.start_line,
+        is_minimized: comment.is_minimized,
+        minimized_reason: comment.minimized_reason,
         diff_hunk: comment.diff_hunk,
         in_reply_to: comment.reply_to.map(|reply| reply.id),
         review_id: comment.pull_request_review.map(|review| review.id),
@@ -2056,6 +2060,8 @@ query PullRequestThreads($owner: String!, $repo: String!, $number: Int!, $cursor
               path
               line
               startLine
+              isMinimized
+              minimizedReason
               reactionGroups {
                 content
                 users(first: 10) {
@@ -2340,6 +2346,8 @@ query PullRequestThreadComments($id: ID!, $cursor: String) {
           path
           line
           startLine
+          isMinimized
+          minimizedReason
           reactionGroups {
             content
             users(first: 10) {

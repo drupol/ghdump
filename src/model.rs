@@ -79,6 +79,8 @@ pub struct ReviewComment {
     pub diff_hunk: Option<String>,
     pub in_reply_to: Option<String>,
     pub review_id: Option<String>,
+    pub is_minimized: Option<bool>,
+    pub minimized_reason: Option<String>,
     pub reactions: Vec<Reaction>,
 }
 
