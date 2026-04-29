@@ -120,6 +120,9 @@ ghdump https://github.com/owner/repo/pull/456 \
 
 The [built-in Markdown template (`default.md.j2`)][builtin template] is available to custom templates. This lets you override one section while reusing the rest:
 
+<details>
+<summary>Example: Custom Stats Section</summary>
+
 ```jinja
 {% extends "default.md.j2" %}
 
@@ -132,17 +135,23 @@ The [built-in Markdown template (`default.md.j2`)][builtin template] is availabl
 {% endblock %}
 ```
 
-Or a more minimal example:
+</details>
+
+<details>
+<summary>Example: Minimal Custom Template</summary>
 
 ```jinja
 {% extends "default.md.j2" %}
 
 {% block labels %}{% endblock %}
+{% block stats %}{% endblock %}
 {% block commits %}{% endblock %}
 {% block milestone %}{% endblock %}
 {% block files %}{% endblock %}
 {% block raw_payloads %}{% endblock %}
 ```
+
+</details>
 
 The default template currently exposes these blocks:
 
@@ -375,6 +384,8 @@ Use MiniJinja's `length` filter against the arrays already in the context:
 - `{{ files | length }}`
 - `{{ commits | length }}`
 - `{{ raw_payloads | length }}`
+
+Grouped reactions expose per-type `count` values. To compute a total across all reaction types, sum `reaction.count` across the top-level `reactions` array plus any `comment.reactions`, nested reply reactions, and `review_threads[].comments[].reactions` you want to include.
 
 </details>
 

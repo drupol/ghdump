@@ -344,7 +344,27 @@ unknown
 
 {% block stats -%}
 {{ render_heading(2, "Stats") -}}
+{%- set reaction_total = namespace(count=0) -%}
+{%- for reaction in reactions -%}
+  {%- set reaction_total.count = reaction_total.count + reaction.count -%}
+{%- endfor -%}
+{%- for comment in comments recursive -%}
+  {%- for reaction in comment.reactions -%}
+    {%- set reaction_total.count = reaction_total.count + reaction.count -%}
+  {%- endfor -%}
+  {%- if comment.replies -%}
+    {{- loop(comment.replies) -}}
+  {%- endif -%}
+{%- endfor -%}
+{%- for thread in review_threads -%}
+  {%- for comment in thread.comments -%}
+    {%- for reaction in comment.reactions -%}
+      {%- set reaction_total.count = reaction_total.count + reaction.count -%}
+    {%- endfor -%}
+  {%- endfor -%}
+{%- endfor -%}
 {{ render_field("Comments", comments | length) -}}
+{{ render_field("Reactions", reaction_total.count) -}}
 {{ render_field("Reviews", reviews | length) -}}
 {{ render_field("Review threads", review_threads | length) -}}
 {{ render_field("Timeline items", timeline | length) -}}

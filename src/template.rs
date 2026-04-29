@@ -643,6 +643,14 @@ mod tests {
                 url: Some("https://github.com/reply-user".to_owned()),
             }),
             body: "Nested reply".to_owned(),
+            reactions: vec![Reaction {
+                content: "heart".to_owned(),
+                count: 1,
+                users: vec![Actor {
+                    login: "reply-user".to_owned(),
+                    url: Some("https://github.com/reply-user".to_owned()),
+                }],
+            }],
             ..Comment::default()
         };
 
@@ -676,6 +684,14 @@ mod tests {
             url: "https://example.com/review-comment".to_owned(),
             body: "Please rename this.".to_owned(),
             diff_hunk: Some("@@ -1 +1 @@".to_owned()),
+            reactions: vec![Reaction {
+                content: "eyes".to_owned(),
+                count: 4,
+                users: vec![Actor {
+                    login: "reviewer".to_owned(),
+                    url: Some("https://github.com/reviewer".to_owned()),
+                }],
+            }],
             ..ReviewComment::default()
         };
 
@@ -706,6 +722,24 @@ mod tests {
                 MetadataField {
                     name: "Merged at".to_owned(),
                     value: "2024-04-28T10:00:00Z".to_owned(),
+                },
+            ],
+            reactions: vec![
+                Reaction {
+                    content: "+1".to_owned(),
+                    count: 2,
+                    users: vec![Actor {
+                        login: "octocat".to_owned(),
+                        url: Some("https://github.com/octocat".to_owned()),
+                    }],
+                },
+                Reaction {
+                    content: "rocket".to_owned(),
+                    count: 1,
+                    users: vec![Actor {
+                        login: "hubot".to_owned(),
+                        url: Some("https://github.com/hubot".to_owned()),
+                    }],
                 },
             ],
             comments: vec![comment],
@@ -778,6 +812,7 @@ mod tests {
         assert!(output.contains("# Issue #42: Improve export templates"));
         assert!(output.contains("## Stats"));
         assert!(output.contains("- Comments: 1"));
+        assert!(output.contains("- Reactions: 10"));
         assert!(output.contains("```md\nMain body\n```"));
         assert!(output.contains("## Timeline (2)"));
         assert!(output.contains("### Comment 1 by [octocat](https://github.com/octocat)"));
