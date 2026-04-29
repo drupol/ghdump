@@ -252,6 +252,7 @@ unknown
 {{ render_field("URL", commit.url) -}}
 {{ render_field("Hash", commit.sha) -}}
 {{ render_field("Author", commit.author_name) -}}
+{{ render_field("GitHub user", render_actor(commit.author_user) if commit.author_user else none) -}}
 {{ render_field("Date", commit.authored_at) -}}
 - Message:
 {{ render_markdown_block(commit.message) | indent(2, true) }}
@@ -436,6 +437,72 @@ unknown
 {{ render_field("Commits", commits | length) }}{{ "\n" -}}
 {%- endblock %}
 
+{% block participants -%}
+{%- set part_ns = namespace(logins=[], items=[]) -%}
+{%- if author and author.login not in part_ns.logins -%}
+  {%- set part_ns.logins = part_ns.logins + [author.login] -%}
+  {%- set item -%}{{ render_actor(author) }} (author){%- endset -%}
+  {%- set part_ns.items = part_ns.items + [item | trim] -%}
+{%- endif -%}
+{%- if merged_by and merged_by.login not in part_ns.logins -%}
+  {%- set part_ns.logins = part_ns.logins + [merged_by.login] -%}
+  {%- set item -%}{{ render_actor(merged_by) }} (merger){%- endset -%}
+  {%- set part_ns.items = part_ns.items + [item | trim] -%}
+{%- endif -%}
+{%- for review in reviews -%}
+  {%- if review.author and review.author.login not in part_ns.logins -%}
+    {%- set part_ns.logins = part_ns.logins + [review.author.login] -%}
+    {%- set item -%}{{ render_actor(review.author) }} (reviewer){%- endset -%}
+    {%- set part_ns.items = part_ns.items + [item | trim] -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- for comment in comments recursive -%}
+  {%- if comment.author and comment.author.login not in part_ns.logins -%}
+    {%- set part_ns.logins = part_ns.logins + [comment.author.login] -%}
+    {%- set item -%}{{ render_actor(comment.author) }} (commenter){%- endset -%}
+    {%- set part_ns.items = part_ns.items + [item | trim] -%}
+  {%- endif -%}
+  {%- if comment.replies -%}{{- loop(comment.replies) -}}{%- endif -%}
+{%- endfor -%}
+{%- for thread in review_threads -%}
+  {%- for comment in thread.comments -%}
+    {%- if comment.author and comment.author.login not in part_ns.logins -%}
+      {%- set part_ns.logins = part_ns.logins + [comment.author.login] -%}
+      {%- set item -%}{{ render_actor(comment.author) }} (review commenter){%- endset -%}
+      {%- set part_ns.items = part_ns.items + [item | trim] -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endfor -%}
+{%- if part_ns.items -%}
+{{ render_heading(2, "Participants (" ~ part_ns.items | length ~ ")") -}}
+{{ render_field(none, part_ns.items) }}{{ "\n" -}}
+{%- endif -%}
+{%- endblock %}
+
+{% block reviews_summary -%}
+{%- if reviews -%}
+{%- set rev_ns = namespace(approved=[], changes_requested=[], commented=[], dismissed=[]) -%}
+{%- for review in reviews -%}
+  {%- set entry -%}{{ render_actor(review.author) }}{%- endset -%}
+  {%- if review.state | upper == "APPROVED" -%}
+    {%- set rev_ns.approved = rev_ns.approved + [entry | trim] -%}
+  {%- elif review.state | upper == "CHANGES_REQUESTED" -%}
+    {%- set rev_ns.changes_requested = rev_ns.changes_requested + [entry | trim] -%}
+  {%- elif review.state | upper == "COMMENTED" -%}
+    {%- set rev_ns.commented = rev_ns.commented + [entry | trim] -%}
+  {%- elif review.state | upper == "DISMISSED" -%}
+    {%- set rev_ns.dismissed = rev_ns.dismissed + [entry | trim] -%}
+  {%- endif -%}
+{%- endfor -%}
+{{ render_heading(2, "Reviews Summary") -}}
+{{ render_field("Approved", rev_ns.approved) -}}
+{{ render_field("Changes requested", rev_ns.changes_requested) -}}
+{{ render_field("Commented", rev_ns.commented) -}}
+{{ render_field("Dismissed", rev_ns.dismissed) -}}
+{{ "\n" -}}
+{%- endif -%}
+{%- endblock %}
+
 {% block description -%}
 {{ render_heading(2, "Description") -}}
 {{ render_markdown_block(body | trim) }}
@@ -444,7 +511,10 @@ unknown
 {% block milestone -%}
 {%- if milestone -%}
 {{ render_heading(2, "Milestone") -}}
-- {{ milestone.title }}
+{{ render_field("Title", ("[" ~ milestone.title ~ "](" ~ milestone.url ~ ")") if milestone.url else milestone.title) -}}
+{{ render_field("State", milestone.state, wrap="`") -}}
+{{ render_field("Due", milestone.due_on) -}}
+{{ "\n" }}
 {%- endif -%}
 {%- endblock %}
 

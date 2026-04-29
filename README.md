@@ -159,6 +159,8 @@ The default template currently exposes these blocks:
 - `header`: the top `# ...` heading.
 - `metadata`: repository, URL, state, author, reviewers, labels, reactions, and related top-level metadata.
 - `stats`: count summary.
+- `participants`: list of unique participants with their roles (author, reviewer, commenter…).
+- `reviews_summary`: compact review breakdown grouped by state (approved, changes-requested, commented, dismissed).
 - `description`: issue, pull request, or discussion body.
 - `milestone`: milestone section.
 - `labels`: expanded labels section.
@@ -168,7 +170,7 @@ The default template currently exposes these blocks:
 - `raw_payloads`: raw REST and GraphQL payloads.
 - `footer`: optional trailing section (empty by default).
 
-Blocks can use the same variables and helper macros as the default template, such as `render_heading`, `render_field`, `render_actor`, `render_reactions`, `render_label`, `render_markdown_block`, `render_collapsible_section`, and `render_diff_block`.
+Blocks can use the same variables and helper macros as the default template, such as `render_heading`, `render_field`, `render_actor`, `render_reactions`, `render_label`, `render_markdown_block`, `render_collapsible_section`, `render_diff_block`, and `render_raw_payload`.
 
 ## Template Variables
 
