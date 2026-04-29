@@ -168,7 +168,7 @@ The default template currently exposes these blocks:
 - `raw_payloads`: raw REST and GraphQL payloads.
 - `footer`: optional trailing section (empty by default).
 
-Blocks can use the same variables and helper macros as the default template, such as `render_heading`, `render_field`, `render_actor`, `render_label`, `render_markdown_block`, and `render_diff_block`.
+Blocks can use the same variables and helper macros as the default template, such as `render_heading`, `render_field`, `render_actor`, `render_reactions`, `render_label`, `render_markdown_block`, `render_collapsible_section`, and `render_diff_block`.
 
 ## Template Variables
 
@@ -309,6 +309,8 @@ Array counts can be computed directly in templates with MiniJinja's `length` fil
   - **diff_hunk** (string or `null`)
   - **in_reply_to** (string or `null`)
   - **review_id** (string or `null`)
+  - **is_minimized** (boolean or `null`)
+  - **minimized_reason** (string or `null`)
   - **reactions** (array of reaction)
 
 </details>
@@ -366,7 +368,7 @@ The `timeline` array contains GitHub timeline events normalized as timeline-entr
   - **request_urls** (array of strings, deduplicated while preserving order)
   - **request_count** (integer, original total before deduplication)
   - **graphql_requests** (array of GraphQL-request)
-  - **payload** (JSON object)
+  - **payload** (JSON value)
 
 - **GraphQL-request**:
   - **query** (string)
