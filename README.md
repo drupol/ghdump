@@ -166,6 +166,7 @@ The default template currently exposes these blocks:
 - `commits`: commits section.
 - `timeline`: chronological timeline rendered from comments, reviews, and timeline events.
 - `raw_payloads`: raw REST and GraphQL payloads.
+- `footer`: optional trailing section (empty by default).
 
 Blocks can use the same variables and helper macros as the default template, such as `render_heading`, `render_field`, `render_actor`, `render_label`, `render_markdown_block`, and `render_diff_block`.
 
