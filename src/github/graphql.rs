@@ -430,7 +430,7 @@ impl<'a> IssueGraphQlFetcher<'a> {
             number,
             title: issue.title,
             url: issue.url,
-            state: issue.state.to_lowercase(),
+            state: issue.state,
             body: issue.body,
             author: issue.author.map(to_actor),
             author_association: issue.author_association,
@@ -445,7 +445,7 @@ impl<'a> IssueGraphQlFetcher<'a> {
             reactions: to_reactions(issue.reaction_groups.as_deref()),
             milestone: issue.milestone.map(|m| crate::model::Milestone {
                 title: m.title,
-                state: Some(m.state.to_lowercase()),
+                state: Some(m.state),
                 due_on: m.due_on,
                 url: Some(m.url),
             }),
@@ -555,7 +555,7 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             },
             MetadataField {
                 name: "Mergeable state".to_owned(),
-                value: pull.mergeable.to_lowercase(),
+                value: pull.mergeable.clone(),
             },
             MetadataField {
                 name: "Base".to_owned(),
@@ -727,12 +727,12 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             number,
             title: pull.title,
             url: pull.url,
-            state: pull.state.to_lowercase(),
+            state: pull.state,
             body: pull.body,
             draft: pull.is_draft,
             merged_by: pull.merged_by.map(to_actor),
             merge_commit_sha: pull.potential_merge_commit.as_ref().map(|c| c.oid.clone()),
-            mergeable_state: Some(pull.mergeable.to_lowercase()),
+            mergeable_state: Some(pull.mergeable.clone()),
             base: Some(BranchRef {
                 ref_name: pull.base_ref_name.clone(),
                 sha: None,
@@ -769,7 +769,7 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             reactions,
             milestone: pull.milestone.map(|m| crate::model::Milestone {
                 title: m.title,
-                state: Some(m.state.to_lowercase()),
+                state: Some(m.state),
                 due_on: m.due_on,
                 url: Some(m.url),
             }),
