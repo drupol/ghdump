@@ -120,6 +120,10 @@ unknown
 {{ render_common_metadata(review) -}}
 {{ render_field("State", review, "state") -}}
 {{ render_field("Submitted", review, "submitted_at") -}}
+{%- if review.reactions -%}
+- Reactions:
+{{ render_reactions(review.reactions) | indent(2, true) }}
+{% endif -%}
 {{ render_markdown_block(review.body) | indent(2, true) }}
 {%- for thread in all_threads -%}
 {%- set ns = namespace(has_match=false, first_comment=none) -%}
@@ -326,6 +330,7 @@ unknown
     {"name": "Repository", "value": owner ~ "/" ~ repo},
     {"name": "URL", "value": "[" ~ url ~ "](" ~ url ~ ")"},
     {"name": "State", "value": state},
+    {"name": "Labels", "value": label_list},
     {"name": "Author", "value": render_actor(author)},
     {"name": "Author association", "value": author_association, "wrap": "`"},
     {"name": "Created", "value": created_at},
@@ -333,10 +338,9 @@ unknown
     {"name": "Closed", "value": closed_at},
     {"name": "Merged", "value": merged_at},
     {"name": "Draft", "value": "Yes" if draft else "No"},
-    {"name": "Requested reviewers", "value": requested_reviewer_list},
-    {"name": "Labels", "value": label_list},
-    {"name": "Assignees", "value": assignee_list},
     {"name": "Milestone", "value": milestone, "key": "title"},
+    {"name": "Requested reviewers", "value": requested_reviewer_list},
+    {"name": "Assignees", "value": assignee_list},
     {"name": "Reactions", "value": reaction_list}
 ] -%}
 
@@ -357,6 +361,11 @@ unknown
     {{- loop(comment.replies) -}}
   {%- endif -%}
 {%- endfor -%}
+{%- for review in reviews -%}
+  {%- for reaction in review.reactions -%}
+    {%- set reaction_total.count = reaction_total.count + reaction.count -%}
+  {%- endfor -%}
+{%- endfor -%}
 {%- for thread in review_threads -%}
   {%- for comment in thread.comments -%}
     {%- for reaction in comment.reactions -%}
@@ -364,13 +373,54 @@ unknown
     {%- endfor -%}
   {%- endfor -%}
 {%- endfor -%}
+{# --- Unresolved review threads --- #}
+{%- set unresolved_ns = namespace(count=0) -%}
+{%- for thread in review_threads -%}
+  {%- if thread.is_resolved == false -%}
+    {%- set unresolved_ns.count = unresolved_ns.count + 1 -%}
+  {%- endif -%}
+{%- endfor -%}
+{# --- Lines added/deleted (PR files) --- #}
+{%- set diff_ns = namespace(additions=0, deletions=0) -%}
+{%- for file in files -%}
+  {%- set diff_ns.additions = diff_ns.additions + file.additions -%}
+  {%- set diff_ns.deletions = diff_ns.deletions + file.deletions -%}
+{%- endfor -%}
+{# --- Unique participants (author + commenters + reviewers + review commenters) --- #}
+{%- set participants_ns = namespace(logins=[]) -%}
+{%- if author and author.login not in participants_ns.logins -%}
+  {%- set participants_ns.logins = participants_ns.logins + [author.login] -%}
+{%- endif -%}
+{%- for comment in comments recursive -%}
+  {%- if comment.author and comment.author.login not in participants_ns.logins -%}
+    {%- set participants_ns.logins = participants_ns.logins + [comment.author.login] -%}
+  {%- endif -%}
+  {%- if comment.replies -%}{{- loop(comment.replies) -}}{%- endif -%}
+{%- endfor -%}
+{%- for review in reviews -%}
+  {%- if review.author and review.author.login not in participants_ns.logins -%}
+    {%- set participants_ns.logins = participants_ns.logins + [review.author.login] -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- for thread in review_threads -%}
+  {%- for comment in thread.comments -%}
+    {%- if comment.author and comment.author.login not in participants_ns.logins -%}
+      {%- set participants_ns.logins = participants_ns.logins + [comment.author.login] -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endfor -%}
 {{ render_field("Comments", comments | length) -}}
 {{ render_field("Reactions", reaction_total.count) -}}
+{{ render_field("Participants", participants_ns.logins | length) -}}
 {{ render_field("Reviews", reviews | length) -}}
 {{ render_field("Review threads", review_threads | length) -}}
+{{ render_field("Unresolved threads", unresolved_ns.count) -}}
 {{ render_field("Timeline items", timeline | length) -}}
 {{ render_field("Labels", labels | length) -}}
 {{ render_field("Files", files | length) -}}
+{%- if files | length > 0 -%}
+{{ render_field("Lines", "+" ~ diff_ns.additions ~ " -" ~ diff_ns.deletions) -}}
+{%- endif -%}
 {{ render_field("Commits", commits | length) }}{{ "\n" -}}
 {%- endblock %}
 
