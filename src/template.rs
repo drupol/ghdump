@@ -89,19 +89,7 @@ struct TemplateContext {
     files: Vec<ChangedFileContext>,
     commits: Vec<CommitContext>,
     raw_payloads: Vec<RawPayloadContext>,
-    counts: CountContext,
     merged_at: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct CountContext {
-    comments: usize,
-    reviews: usize,
-    review_threads: usize,
-    timeline: usize,
-    files: usize,
-    commits: usize,
-    raw_payloads: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -341,15 +329,6 @@ impl TemplateContext {
                 .iter()
                 .map(RawPayloadContext::from_raw_payload)
                 .collect(),
-            counts: CountContext {
-                comments: document.comments.len(),
-                reviews: document.reviews.len(),
-                review_threads: document.review_threads.len(),
-                timeline: document.timeline.len(),
-                files: document.files.len(),
-                commits: document.commits.len(),
-                raw_payloads: document.raw_payloads.len(),
-            },
             merged_at: document
                 .metadata
                 .iter()
@@ -777,7 +756,6 @@ mod tests {
         assert!(context.contains("\"owner\": \"octocat\""));
         assert!(context.contains("\"repo\": \"Hello-World\""));
         assert!(context.contains("\"title\": \"Improve export templates\""));
-        assert!(context.contains("\"counts\""));
         assert!(context.contains("\"merged_at\": \"2024-04-28T10:00:00Z\""));
         assert!(context.contains("\"sha\": \"abc1234\""));
         assert!(context.contains("\"path\": \"src/lib.rs\""));

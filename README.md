@@ -126,9 +126,9 @@ The [built-in Markdown template (`default.md.j2`)][builtin template] is availabl
 {% block stats %}
 ## Custom Stats
 
-- Comments: {{ counts.comments }}
+- Comments: {{ comments | length }}
 - Labels: {{ labels | length }}
-- Files: {{ counts.files }}
+- Files: {{ files | length }}
 {% endblock %}
 ```
 
@@ -199,7 +199,6 @@ Array counts can be computed directly in templates with MiniJinja's `length` fil
 - **files** (array of changed-file objects)
 - **commits** (array of commit objects)
 - **raw_payloads** (array of raw-payload objects)
-- **counts** (count object)
 
 </details>
 
@@ -364,18 +363,18 @@ The `timeline` array contains GitHub timeline events normalized as timeline-entr
 
 <details>
 
-<summary>Counts</summary>
+<summary>Computing Counts</summary>
 
-- **counts**:
-  - **comments** (integer)
-  - **reviews** (integer)
-  - **review_threads** (integer)
-  - **timeline** (integer, count of entries in the raw `timeline` array)
-  - **files** (integer)
-  - **commits** (integer)
-  - **raw_payloads** (integer)
+Use MiniJinja's `length` filter against the arrays already in the context:
 
-There is no separate `counts.labels` field. Use `{{ labels | length }}` in a template when you need the number of labels.
+- `{{ comments | length }}`
+- `{{ reviews | length }}`
+- `{{ review_threads | length }}`
+- `{{ timeline | length }}`
+- `{{ labels | length }}`
+- `{{ files | length }}`
+- `{{ commits | length }}`
+- `{{ raw_payloads | length }}`
 
 </details>
 

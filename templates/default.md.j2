@@ -344,13 +344,13 @@ unknown
 
 {% block stats -%}
 {{ render_heading(2, "Stats") -}}
-{{ render_field("Comments", counts, "comments") -}}
-{{ render_field("Reviews", counts, "reviews") -}}
-{{ render_field("Review threads", counts, "review_threads") -}}
-{{ render_field("Timeline items", counts, "timeline") -}}
+{{ render_field("Comments", comments | length) -}}
+{{ render_field("Reviews", reviews | length) -}}
+{{ render_field("Review threads", review_threads | length) -}}
+{{ render_field("Timeline items", timeline | length) -}}
 {{ render_field("Labels", labels | length) -}}
-{{ render_field("Files", counts, "files") -}}
-{{ render_field("Commits", counts, "commits") }}{{ "\n" -}}
+{{ render_field("Files", files | length) -}}
+{{ render_field("Commits", commits | length) }}{{ "\n" -}}
 {%- endblock %}
 
 {% block description -%}
