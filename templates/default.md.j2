@@ -437,6 +437,71 @@ unknown
 {{ render_field("Commits", commits | length) }}{{ "\n" -}}
 {%- endblock %}
 
+{% block checks -%}
+{%- if checks -%}
+{{ render_heading(2, "Checks (" ~ checks | length ~ ")") -}}
+{%- set checks_ns = namespace(success=0, failed=0, pending=0, cancelled=0) -%}
+{%- for check in checks -%}
+  {%- set raw_status = (check.conclusion if check.conclusion else check.status) | lower -%}
+  {%- if raw_status in ["success", "neutral", "skipped"] -%}
+    {%- set checks_ns.success = checks_ns.success + 1 -%}
+  {%- elif raw_status in ["failure", "timed_out", "action_required", "startup_failure"] -%}
+    {%- set checks_ns.failed = checks_ns.failed + 1 -%}
+  {%- elif raw_status in ["cancelled", "stale"] -%}
+    {%- set checks_ns.cancelled = checks_ns.cancelled + 1 -%}
+  {%- else -%}
+    {%- set checks_ns.pending = checks_ns.pending + 1 -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- set ordered_statuses = [
+  "failure", "timed_out", "action_required", "startup_failure",
+  "pending", "queued", "in_progress", "requested", "waiting",
+  "cancelled", "stale",
+  "skipped", "success", "neutral"
+] -%}
+| Name | Source | Result | Description |{{ "\n" -}}
+|---|---|---|---|{{ "\n" -}}
+{%- for grouped_status in ordered_statuses -%}
+  {%- for check in checks | sort(attribute="name") -%}
+    {%- set raw_status = (check.conclusion if check.conclusion else check.status) | lower -%}
+    {%- if raw_status in ["success", "neutral"] -%}
+      {%- set normalized_status = "success" -%}
+    {%- elif raw_status == "skipped" -%}
+      {%- set normalized_status = "skipped" -%}
+    {%- elif raw_status in ["failure", "timed_out", "action_required", "startup_failure"] -%}
+      {%- set normalized_status = raw_status -%}
+    {%- elif raw_status in ["cancelled", "stale"] -%}
+      {%- set normalized_status = raw_status -%}
+    {%- elif raw_status in ["pending", "queued", "in_progress", "requested", "waiting"] -%}
+      {%- set normalized_status = raw_status -%}
+    {%- else -%}
+      {%- set normalized_status = "other" -%}
+    {%- endif -%}
+    {%- if normalized_status == grouped_status -%}
+      {%- set status_label = (check.conclusion if check.conclusion else check.status) -%}
+      {%- set name_label = ("[" ~ (check.name | replace("|", "\\|")) ~ "](" ~ check.url ~ ")") if check.url else (check.name | replace("|", "\\|")) -%}
+      {%- set description_label = (check.description | replace("|", "\\|")) if check.description else "" -%}
+| {{ name_label }} | `{{ check.kind }}` | `{{ status_label | replace("|", "\\|") }}` | {{ description_label }} |{{ "\n" -}}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endfor -%}
+{%- for check in checks | sort(attribute="name") -%}
+  {%- set raw_status = (check.conclusion if check.conclusion else check.status) | lower -%}
+  {%- if raw_status not in ordered_statuses -%}
+    {%- set status_label = (check.conclusion if check.conclusion else check.status) -%}
+    {%- set name_label = ("[" ~ (check.name | replace("|", "\\|")) ~ "](" ~ check.url ~ ")") if check.url else (check.name | replace("|", "\\|")) -%}
+    {%- set description_label = (check.description | replace("|", "\\|")) if check.description else "" -%}
+| {{ name_label }} | `{{ check.kind }}` | `{{ status_label | replace("|", "\\|") }}` | {{ description_label }} |{{ "\n" -}}
+  {%- endif -%}
+{%- endfor -%}
+{{ "\n" -}}
+{{ render_field("Passing", checks_ns.success) -}}
+{{ render_field("Failing", checks_ns.failed) -}}
+{{ render_field("Pending", checks_ns.pending) -}}
+{{ render_field("Cancelled", checks_ns.cancelled) -}}
+{%- endif -%}
+{%- endblock %}
+
 {% block participants -%}
 {%- set part_ns = namespace(logins=[], items=[]) -%}
 {%- if author and author.login not in part_ns.logins -%}

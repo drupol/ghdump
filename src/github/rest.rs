@@ -229,3 +229,39 @@ pub struct RestCommit {
     pub commit: RestGitCommit,
     pub files: Option<Vec<RestPullRequestFile>>,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RestCombinedStatus {
+    pub state: String,
+    #[serde(default)]
+    pub statuses: Vec<RestStatusContext>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RestStatusContext {
+    pub context: Option<String>,
+    pub state: String,
+    pub target_url: Option<String>,
+    pub description: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RestCheckRunsResponse {
+    #[serde(default)]
+    pub check_runs: Vec<RestCheckRun>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RestCheckRun {
+    pub name: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+    pub html_url: Option<String>,
+    pub details_url: Option<String>,
+    pub app: Option<RestCheckApp>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RestCheckApp {
+    pub name: String,
+}

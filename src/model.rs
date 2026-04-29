@@ -164,6 +164,16 @@ pub struct BranchRef {
     pub repo_full_name: Option<String>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct CheckStatus {
+    pub kind: String,
+    pub name: String,
+    pub status: String,
+    pub conclusion: Option<String>,
+    pub url: Option<String>,
+    pub description: Option<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct ExportDocument {
     pub kind: ResourceKind,
@@ -180,6 +190,7 @@ pub struct ExportDocument {
     pub mergeable_state: Option<String>,
     pub base: Option<BranchRef>,
     pub head: Option<BranchRef>,
+    pub checks: Vec<CheckStatus>,
     pub author: Option<Actor>,
     pub author_association: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
@@ -220,6 +231,7 @@ impl Default for ExportDocument {
             mergeable_state: None,
             base: None,
             head: None,
+            checks: Vec::new(),
             author: None,
             author_association: None,
             created_at: None,

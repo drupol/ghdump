@@ -743,7 +743,7 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             }),
             head: Some(BranchRef {
                 ref_name: pull.head_ref_name.clone(),
-                sha: None,
+                sha: pull.head_ref_oid.clone(),
                 repo_full_name: pull
                     .head_repository
                     .as_ref()
@@ -1271,6 +1271,7 @@ struct GraphQlPullRequest {
     base_ref_name: String,
     base_repository: Option<GraphQlRepoRef>,
     head_ref_name: String,
+    head_ref_oid: Option<String>,
     head_repository: Option<GraphQlRepoRef>,
     additions: i64,
     deletions: i64,
@@ -2194,6 +2195,7 @@ query PullRequest($owner: String!, $repo: String!, $number: Int!, $cursor: Strin
         nameWithOwner
       }
       headRefName
+      headRefOid
       headRepository {
         nameWithOwner
       }

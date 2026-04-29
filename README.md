@@ -159,6 +159,7 @@ The default template currently exposes these blocks:
 - `header`: the top `# ...` heading.
 - `metadata`: repository, URL, state, author, reviewers, labels, reactions, and related top-level metadata.
 - `stats`: count summary.
+- `checks`: CI summary (passing/failing/pending/cancelled) with detailed status/check-run entries (PR only).
 - `participants`: list of unique participants with their roles (author, reviewer, commenter…).
 - `reviews_summary`: compact review breakdown grouped by state (approved, changes-requested, commented, dismissed).
 - `description`: issue, pull request, or discussion body.
@@ -207,6 +208,7 @@ Array counts can be computed directly in templates with MiniJinja's `length` fil
 - **mergeable_state** (string or `null`) — PR only, e.g. `clean`, `dirty`, `blocked`
 - **base** (branch-ref object or `null`) — PR only
 - **head** (branch-ref object or `null`) — PR only
+- **checks** (array of check-status objects) — PR only
 - **labels** (array of label objects)
 - **assignees** (array of actor objects)
 - **requested_reviewers** (array of actor objects)
@@ -237,6 +239,14 @@ Array counts can be computed directly in templates with MiniJinja's `length` fil
   - **ref_name** (string) — branch name
   - **sha** (string or `null`) — tip commit SHA (available via REST path)
   - **repo_full_name** (string or `null`) — `owner/repo` (useful for forks)
+
+- **check-status** (PR only):
+  - **kind** (string) — `status` or `check`
+  - **name** (string)
+  - **status** (string)
+  - **conclusion** (string or `null`)
+  - **url** (string or `null`)
+  - **description** (string or `null`)
 
 - **metadata-field**:
   - **name** (string)

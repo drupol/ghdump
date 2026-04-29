@@ -15,18 +15,18 @@ use url::Url;
 use crate::{
     cli::{ResolvedTarget, ResourceKind},
     model::{
-        Actor, BranchRef, ChangedFile, Comment, CommitAuthor, CommitSummary, ExportDocument,
-        Label, MetadataField, Milestone, RawPayload, Reaction, Review, ReviewComment, ReviewThread,
-        TimelineEntry,
+        Actor, BranchRef, ChangedFile, CheckStatus, Comment, CommitAuthor, CommitSummary,
+        ExportDocument, Label, MetadataField, Milestone, RawPayload, Reaction, Review,
+        ReviewComment, ReviewThread, TimelineEntry,
     },
 };
 
 use self::{
     graphql::{DiscussionFetcher, IssueGraphQlFetcher, PullRequestGraphQlFetcher},
     rest::{
-        RestActor, RestCommit, RestIssue, RestIssueComment, RestMilestone, RestPullRequest,
-        RestPullRequestComment, RestPullRequestFile, RestPullRequestReview, RestReaction,
-        RestReactions, RestTimelineEvent,
+        RestActor, RestCheckRunsResponse, RestCombinedStatus, RestCommit, RestIssue,
+        RestIssueComment, RestMilestone, RestPullRequest, RestPullRequestComment,
+        RestPullRequestFile, RestPullRequestReview, RestReaction, RestReactions, RestTimelineEvent,
     },
 };
 
@@ -292,6 +292,30 @@ impl GitHubClient {
                         .enrich_commits(&mut document.commits, &target.owner, &target.repo)
                         .await;
 
+                    if let Some(head_sha) = document
+                        .head
+                        .as_ref()
+                        .and_then(|head| head.sha.as_ref())
+                        .cloned()
+                    {
+                        match self
+                            .fetch_pull_request_checks(&target.owner, &target.repo, &head_sha)
+                            .await
+                        {
+                            Ok((checks, check_payloads)) => {
+                                document.checks = checks;
+                                document.raw_payloads.extend(check_payloads);
+                            }
+                            Err(error) => document.metadata.push(MetadataField {
+                                name: "Checks enrichment".to_owned(),
+                                value: format!(
+                                    "pull request #{} checks skipped: {error:#}",
+                                    target.number
+                                ),
+                            }),
+                        }
+                    }
+
                     return Ok(document);
                 }
                 Err(error) => {
@@ -412,6 +436,21 @@ impl GitHubClient {
             commits: commits.iter().map(to_commit_summary).collect(),
             ..ExportDocument::default()
         };
+
+        match self
+            .fetch_pull_request_checks(&target.owner, &target.repo, &pull_request.head.sha)
+            .await
+        {
+            Ok((checks, check_payloads)) => {
+                document.checks = checks;
+                document.raw_payloads.extend(check_payloads);
+            }
+            Err(error) => document.metadata.push(MetadataField {
+                name: "Checks enrichment".to_owned(),
+                value: format!("pull request #{} checks skipped: {error:#}", target.number),
+            }),
+        }
+
         document.metadata.extend(issue_comment_warnings);
         document.metadata.extend(review_warnings);
         let _ = self
@@ -873,6 +912,65 @@ impl GitHubClient {
         let (reactions, request_urls): (Vec<RestReaction>, Vec<String>) =
             self.get_rest_paginated_with_urls(path).await?;
         Ok((aggregate_reactions(reactions), request_urls))
+    }
+
+    async fn fetch_pull_request_checks(
+        &self,
+        owner: &str,
+        repo: &str,
+        head_sha: &str,
+    ) -> anyhow::Result<(Vec<CheckStatus>, Vec<RawPayload>)> {
+        let status_path = format!("repos/{owner}/{repo}/commits/{head_sha}/status");
+        let (combined_status, status_url): (RestCombinedStatus, String) =
+            self.get_rest_with_url(&status_path).await?;
+
+        let checks_path = format!("repos/{owner}/{repo}/commits/{head_sha}/check-runs");
+        let (check_runs, checks_url): (RestCheckRunsResponse, String) =
+            self.get_rest_with_url(&checks_path).await?;
+
+        let mut checks = Vec::new();
+
+        for status in combined_status.statuses.iter() {
+            checks.push(CheckStatus {
+                kind: "status".to_owned(),
+                name: status
+                    .context
+                    .clone()
+                    .unwrap_or_else(|| "status".to_owned()),
+                status: status.state.clone(),
+                conclusion: None,
+                url: status.target_url.clone(),
+                description: status.description.clone(),
+            });
+        }
+
+        for run in check_runs.check_runs.iter() {
+            checks.push(CheckStatus {
+                kind: "check".to_owned(),
+                name: run.name.clone(),
+                status: run.status.clone(),
+                conclusion: run.conclusion.clone(),
+                url: run.details_url.clone().or_else(|| run.html_url.clone()),
+                description: run.app.as_ref().map(|app| format!("App: {}", app.name)),
+            });
+        }
+
+        let payloads = vec![
+            RawPayload {
+                name: "rest.pull_request_combined_status".to_owned(),
+                payload: serde_json::to_value(&combined_status)?,
+                request_urls: vec![status_url],
+                graphql_requests: Vec::new(),
+            },
+            RawPayload {
+                name: "rest.pull_request_check_runs".to_owned(),
+                payload: serde_json::to_value(&check_runs)?,
+                request_urls: vec![checks_url],
+                graphql_requests: Vec::new(),
+            },
+        ];
+
+        Ok((checks, payloads))
     }
 
     fn rest_url(&self, path: &str, page: Option<u32>) -> Url {

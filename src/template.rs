@@ -7,9 +7,9 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::model::{
-    Actor, BranchRef, ChangedFile, Comment, CommitAuthor, CommitSummary, ExportDocument, Label,
-    MetadataField, Milestone, RawGraphQlRequest, RawPayload, Reaction, Review, ReviewComment,
-    ReviewThread, TimelineEntry,
+    Actor, BranchRef, ChangedFile, CheckStatus, Comment, CommitAuthor, CommitSummary,
+    ExportDocument, Label, MetadataField, Milestone, RawGraphQlRequest, RawPayload, Reaction,
+    Review, ReviewComment, ReviewThread, TimelineEntry,
 };
 
 const DEFAULT_TEMPLATE_NAME: &str = "document.md.j2";
@@ -99,6 +99,7 @@ struct TemplateContext {
     mergeable_state: Option<String>,
     base: Option<BranchRefContext>,
     head: Option<BranchRefContext>,
+    checks: Vec<CheckStatusContext>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -106,6 +107,16 @@ struct BranchRefContext {
     ref_name: String,
     sha: Option<String>,
     repo_full_name: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CheckStatusContext {
+    kind: String,
+    name: String,
+    status: String,
+    conclusion: Option<String>,
+    url: Option<String>,
+    description: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -381,6 +392,19 @@ impl BranchRefContext {
             ref_name: branch.ref_name.clone(),
             sha: branch.sha.clone(),
             repo_full_name: branch.repo_full_name.clone(),
+        }
+    }
+}
+
+impl CheckStatusContext {
+    fn from_check_status(check: &CheckStatus) -> Self {
+        Self {
+            kind: check.kind.clone(),
+            name: check.name.clone(),
+            status: check.status.clone(),
+            conclusion: check.conclusion.clone(),
+            url: check.url.clone(),
+            description: check.description.clone(),
         }
     }
 }
