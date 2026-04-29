@@ -62,6 +62,7 @@ pub struct Review {
     pub body: String,
     pub submitted_at: Option<DateTime<Utc>>,
     pub commit_id: Option<String>,
+    pub reactions: Vec<Reaction>,
 }
 
 #[derive(Clone, Debug, Default)]

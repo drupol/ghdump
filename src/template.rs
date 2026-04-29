@@ -155,6 +155,7 @@ struct ReviewContext {
     body: String,
     submitted_at: Option<String>,
     commit_id: Option<String>,
+    reactions: Vec<ReactionContext>,
 }
 
 #[derive(Debug, Serialize)]
@@ -454,6 +455,11 @@ impl ReviewContext {
             body: review.body.clone(),
             submitted_at: format_optional_datetime(review.submitted_at.as_ref()),
             commit_id: review.commit_id.clone(),
+            reactions: review
+                .reactions
+                .iter()
+                .map(ReactionContext::from_reaction)
+                .collect(),
         }
     }
 }

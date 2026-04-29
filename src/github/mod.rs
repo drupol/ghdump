@@ -353,6 +353,9 @@ impl GitHubClient {
         let (issue_comments, issue_comment_warnings, issue_comment_reaction_urls) = self
             .build_issue_comments(&target.owner, &target.repo, &raw_issue_comments)
             .await;
+        let (rendered_reviews, review_warnings, review_reaction_urls) = self
+            .build_reviews(&target.owner, &target.repo, target.number, &reviews)
+            .await;
         let (review_threads, review_comment_warnings, review_comment_reaction_urls) = self
             .build_review_threads(&target.owner, &target.repo, &raw_review_comments)
             .await;
@@ -382,7 +385,7 @@ impl GitHubClient {
             milestone: issue.milestone.as_ref().map(to_milestone),
             metadata: pull_request_metadata(&pull_request, &issue),
             comments: issue_comments,
-            reviews: reviews.iter().map(to_review).collect(),
+            reviews: rendered_reviews,
             review_threads,
             timeline: timeline.iter().map(to_timeline_entry).collect(),
             files: files.iter().map(to_changed_file).collect(),
@@ -390,6 +393,7 @@ impl GitHubClient {
             ..ExportDocument::default()
         };
         document.metadata.extend(issue_comment_warnings);
+        document.metadata.extend(review_warnings);
         let _ = self
             .enrich_timeline(&mut document.timeline, &target.owner, &target.repo)
             .await;
@@ -473,7 +477,7 @@ impl GitHubClient {
             RawPayload {
                 name: "rest.pull_request_reviews".to_owned(),
                 payload: serde_json::to_value(&reviews)?,
-                request_urls: review_request_urls,
+                request_urls: [review_request_urls, review_reaction_urls].concat(),
                 graphql_requests: Vec::new(),
             },
             RawPayload {
@@ -764,6 +768,40 @@ impl GitHubClient {
         )
     }
 
+    async fn build_reviews(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+        reviews: &[RestPullRequestReview],
+    ) -> (Vec<Review>, Vec<MetadataField>, Vec<String>) {
+        let mut rendered_reviews = Vec::with_capacity(reviews.len());
+        let mut warnings = Vec::new();
+        let mut request_urls = Vec::new();
+
+        for review in reviews {
+            let mut rendered = to_review(review);
+            if review.reactions.is_none() || !rendered.reactions.is_empty() {
+                match self
+                    .fetch_review_reactions(owner, repo, number, review.id)
+                    .await
+                {
+                    Ok((reactions, urls)) => {
+                        request_urls.extend(urls);
+                        rendered.reactions = reactions;
+                    }
+                    Err(error) => warnings.push(MetadataField {
+                        name: "Reaction enrichment".to_owned(),
+                        value: format!("review {} reactions skipped: {error:#}", review.id),
+                    }),
+                }
+            }
+            rendered_reviews.push(rendered);
+        }
+
+        (rendered_reviews, warnings, request_urls)
+    }
+
     async fn fetch_issue_comment_reactions(
         &self,
         owner: &str,
@@ -794,6 +832,19 @@ impl GitHubClient {
     ) -> anyhow::Result<(Vec<Reaction>, Vec<String>)> {
         self.fetch_reactions(&format!(
             "repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions"
+        ))
+        .await
+    }
+
+    async fn fetch_review_reactions(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+        review_id: u64,
+    ) -> anyhow::Result<(Vec<Reaction>, Vec<String>)> {
+        self.fetch_reactions(&format!(
+            "repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}/reactions"
         ))
         .await
     }
@@ -1044,6 +1095,7 @@ fn to_review(review: &RestPullRequestReview) -> Review {
         body: review.body.clone().unwrap_or_default(),
         submitted_at: review.submitted_at,
         commit_id: review.commit_id.clone(),
+        reactions: to_reactions(review.reactions.as_ref()),
     }
 }
 

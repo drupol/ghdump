@@ -646,6 +646,38 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             rendered_comments.push(rendered);
         }
 
+        let review_nodes = std::mem::take(&mut pull.reviews.nodes);
+        let mut rendered_reviews = Vec::with_capacity(review_nodes.len());
+        for review in review_nodes {
+            let mut rendered = to_review(review.clone());
+
+            if let Some(review_id) = pull_review_id_from_url(&review.url) {
+                match self
+                    .fetch_review_reactions(owner, repo, number, review_id)
+                    .await
+                {
+                    Ok((reactions, urls)) => {
+                        rendered.reactions = reactions;
+                        reaction_request_urls.extend(urls);
+                    }
+                    Err(error) => metadata.push(MetadataField {
+                        name: "Reaction enrichment".to_owned(),
+                        value: format!("review {} reactions skipped: {error:#}", review_id),
+                    }),
+                }
+            } else {
+                metadata.push(MetadataField {
+                    name: "Reaction enrichment".to_owned(),
+                    value: format!(
+                        "review {} reactions skipped: failed to parse numeric review id from URL",
+                        review.id
+                    ),
+                });
+            }
+
+            rendered_reviews.push(rendered);
+        }
+
         let reactions = match self.fetch_pull_request_reactions(owner, repo, number).await {
             Ok((reactions, urls)) => {
                 reaction_request_urls.extend(urls);
@@ -720,7 +752,7 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             }),
             metadata,
             comments: rendered_comments,
-            reviews: pull.reviews.nodes.into_iter().map(to_review).collect(),
+            reviews: rendered_reviews,
             review_threads,
             files: rest_files.iter().map(to_changed_file_rest).collect(),
             commits: pull
@@ -898,6 +930,19 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
         number: u64,
     ) -> anyhow::Result<(Vec<Reaction>, Vec<String>)> {
         let path = format!("repos/{owner}/{repo}/issues/{number}/reactions");
+        let (reactions, request_urls): (Vec<RestReaction>, Vec<String>) =
+            self.client.get_rest_paginated_with_urls(&path).await?;
+        Ok((aggregate_rest_reactions(reactions), request_urls))
+    }
+
+    async fn fetch_review_reactions(
+        &self,
+        owner: &str,
+        repo: &str,
+        number: u64,
+        review_id: u64,
+    ) -> anyhow::Result<(Vec<Reaction>, Vec<String>)> {
+        let path = format!("repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}/reactions");
         let (reactions, request_urls): (Vec<RestReaction>, Vec<String>) =
             self.client.get_rest_paginated_with_urls(&path).await?;
         Ok((aggregate_rest_reactions(reactions), request_urls))
@@ -1444,6 +1489,10 @@ fn review_comment_id_from_url(url: &str) -> Option<u64> {
         .ok()
 }
 
+fn pull_review_id_from_url(url: &str) -> Option<u64> {
+    url.rsplit('-').next()?.parse().ok()
+}
+
 fn aggregate_rest_reactions(reactions: Vec<RestReaction>) -> Vec<Reaction> {
     let mut grouped_users: HashMap<String, Vec<Actor>> = HashMap::new();
     let mut grouped_counts: HashMap<String, u64> = HashMap::new();
@@ -1564,6 +1613,7 @@ fn to_review(review: GraphQlReview) -> crate::model::Review {
         body: review.body,
         submitted_at: review.submitted_at,
         commit_id: review.commit.map(|c| c.oid),
+        reactions: Vec::new(),
     }
 }
 

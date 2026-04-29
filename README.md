@@ -283,6 +283,7 @@ Array counts can be computed directly in templates with MiniJinja's `length` fil
   - **body** (string)
   - **submitted_at** (RFC 3339 string or `null`)
   - **commit_id** (string or `null`)
+  - **reactions** (array of reaction)
 
 - **review-thread**:
   - **ordinal** (integer)
@@ -386,7 +387,7 @@ Use MiniJinja's `length` filter against the arrays already in the context:
 - `{{ commits | length }}`
 - `{{ raw_payloads | length }}`
 
-Grouped reactions expose per-type `count` values. To compute a total across all reaction types, sum `reaction.count` across the top-level `reactions` array plus any `comment.reactions`, nested reply reactions, and `review_threads[].comments[].reactions` you want to include.
+Grouped reactions expose per-type `count` values. To compute a total across all reaction types, sum `reaction.count` across the top-level `reactions` array plus any `review.reactions`, `comment.reactions`, nested reply reactions, and `review_threads[].comments[].reactions` you want to include.
 
 </details>
 

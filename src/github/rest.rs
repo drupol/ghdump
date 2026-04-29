@@ -175,6 +175,7 @@ pub struct RestPullRequestReview {
     pub author_association: Option<String>,
     pub submitted_at: Option<DateTime<Utc>>,
     pub commit_id: Option<String>,
+    pub reactions: Option<RestReactions>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
