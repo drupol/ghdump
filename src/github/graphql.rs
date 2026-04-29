@@ -726,6 +726,7 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             url: pull.url,
             state: pull.state.to_lowercase(),
             body: pull.body,
+            draft: pull.is_draft,
             author: pull.author.map(to_actor),
             author_association: pull.author_association,
             created_at: Some(pull.created_at),

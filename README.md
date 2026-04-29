@@ -195,6 +195,7 @@ Array counts can be computed directly in templates with MiniJinja's `length` fil
 - **created_at** (RFC 3339 string or `null`)
 - **updated_at** (RFC 3339 string or `null`)
 - **closed_at** (RFC 3339 string or `null`)
+- **draft** (boolean)
 - **merged_at** (RFC 3339 string or `null`)
 - **labels** (array of label objects)
 - **assignees** (array of actor objects)

@@ -90,6 +90,7 @@ struct TemplateContext {
     commits: Vec<CommitContext>,
     raw_payloads: Vec<RawPayloadContext>,
     merged_at: Option<String>,
+    draft: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -335,6 +336,7 @@ impl TemplateContext {
                 .iter()
                 .find(|f| f.name == "Merged at")
                 .map(|f| f.value.clone()),
+            draft: document.draft,
         }
     }
 }
@@ -819,6 +821,9 @@ mod tests {
         assert!(output.contains("## Stats"));
         assert!(output.contains("- Comments: 1"));
         assert!(output.contains("- Reactions: 10"));
+        assert!(output.contains("- Participants: 2"));
+        assert!(output.contains("- Review threads: 1"));
+        assert!(output.contains("- Unresolved threads: 0"));
         assert!(output.contains("```md\nMain body\n```"));
         assert!(output.contains("## Timeline (2)"));
         assert!(output.contains("### Comment 1 by [octocat](https://github.com/octocat)"));

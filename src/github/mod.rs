@@ -369,6 +369,7 @@ impl GitHubClient {
             url: pull_request.html_url.clone(),
             state: pull_request.state.clone(),
             body: pull_request.body.clone().unwrap_or_default(),
+            draft: pull_request.draft,
             author: pull_request.user.as_ref().map(to_actor),
             author_association: issue.author_association.clone(),
             created_at: Some(pull_request.created_at),
