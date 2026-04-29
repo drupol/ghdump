@@ -308,6 +308,16 @@ unknown
   {%- set requested_reviewer_list = ns.items -%}
 {%- endif -%}
 
+{%- set assignee_list = [] -%}
+{%- if assignees | length > 0 -%}
+  {%- set ns = namespace(items=[]) -%}
+  {%- for assignee in assignees -%}
+    {%- set item -%}{{ render_actor(assignee) }}{%- endset -%}
+    {%- set ns.items = ns.items + [item | trim] -%}
+  {%- endfor -%}
+  {%- set assignee_list = ns.items -%}
+{%- endif -%}
+
 {%- set fields = [
     {"name": "Repository", "value": owner ~ "/" ~ repo},
     {"name": "URL", "value": "[" ~ url ~ "](" ~ url ~ ")"},
@@ -320,7 +330,7 @@ unknown
     {"name": "Merged", "value": merged_at},
     {"name": "Requested reviewers", "value": requested_reviewer_list},
     {"name": "Labels", "value": label_list},
-    {"name": "Assignees", "value": assignees | map(attribute="login") | list},
+    {"name": "Assignees", "value": assignee_list},
     {"name": "Milestone", "value": milestone, "key": "title"},
     {"name": "Reactions", "value": reaction_list}
 ] -%}
