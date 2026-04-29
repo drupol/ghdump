@@ -90,6 +90,7 @@ struct TemplateContext {
     commits: Vec<CommitContext>,
     raw_payloads: Vec<RawPayloadContext>,
     merged_at: Option<String>,
+    merged_by: Option<ActorContext>,
     draft: bool,
 }
 
@@ -336,6 +337,7 @@ impl TemplateContext {
                 .iter()
                 .find(|f| f.name == "Merged at")
                 .map(|f| f.value.clone()),
+            merged_by: document.merged_by.as_ref().map(ActorContext::from_actor),
             draft: document.draft,
         }
     }

@@ -727,6 +727,7 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             state: pull.state.to_lowercase(),
             body: pull.body,
             draft: pull.is_draft,
+            merged_by: pull.merged_by.map(to_actor),
             author: pull.author.map(to_actor),
             author_association: pull.author_association,
             created_at: Some(pull.created_at),

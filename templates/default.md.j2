@@ -341,6 +341,7 @@ unknown
     {"name": "Updated", "value": updated_at},
     {"name": "Closed", "value": closed_at},
     {"name": "Merged", "value": merged_at},
+    {"name": "Merged by", "value": render_actor(merged_by) if merged_by else none},
     {"name": "Draft", "value": "Yes" if draft else "No"},
     {"name": "Milestone", "value": milestone, "key": "title"},
     {"name": "Requested reviewers", "value": requested_reviewer_list},
