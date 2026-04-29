@@ -87,13 +87,19 @@ unknown
 {{- render_fenced_block(body, "md") -}}
 {%- endmacro -%}
 
-{%- macro render_diff_block(diff_text, summary="View Diff") -%}
+{%- macro render_collapsible_section(summary, content) -%}
+{%- if content is not none and (content | trim) -%}
 <details>
 <summary>{{ summary }}</summary>
 
-{{ render_fenced_block(diff_text, "diff") -}}
-
+{{ content }}
 </details>
+{{ "\n" -}}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro render_diff_block(diff_text, summary="View Diff") -%}
+{{- render_collapsible_section(summary, render_fenced_block(diff_text, "diff")) -}}
 {%- endmacro -%}
 
 {%- macro render_comment(comment) -%}
@@ -259,25 +265,23 @@ unknown
 {%- endmacro -%}
 
 {%- macro render_raw_payload(payload) -%}
-<details>
-<summary>{{ payload.name }}</summary>
-
+{%- set ns = namespace(content="") -%}
 {% if payload.request_urls -%}
-{{ render_heading(3, "Request URLs" ~ ((" (" ~ payload.request_count ~ " requests, " ~ payload.request_urls|length ~ " unique endpoint" ~ ("s" if payload.request_urls|length > 1 else "") ~ ")") if payload.request_count > payload.request_urls|length else "")) -}}
+{%- set ns.content = ns.content ~ render_heading(3, "Request URLs" ~ ((" (" ~ payload.request_count ~ " requests, " ~ payload.request_urls|length ~ " unique endpoint" ~ ("s" if payload.request_urls|length > 1 else "") ~ ")") if payload.request_count > payload.request_urls|length else "")) -%}
 {% for request_url in payload.request_urls -%}
-- {{ request_url }}
+{%- set ns.content = ns.content ~ "- " ~ request_url ~ "\n" -%}
 {% endfor -%}
 {% endif -%}
 {% if payload.graphql_requests -%}
-{{ render_heading(3, "GraphQL Requests") -}}
+{%- set ns.content = ns.content ~ render_heading(3, "GraphQL Requests") -%}
 {% for request in payload.graphql_requests -%}
-{{ render_heading(4, "Request " ~ loop.index) -}}
-{{ render_fenced_block(request.query, "graphql") | indent(2, true) }}
-{{ render_fenced_block(request.variables|tojson(indent=2), "json") | indent(2, true) }}
+{%- set ns.content = ns.content ~ render_heading(4, "Request " ~ loop.index) -%}
+{%- set ns.content = ns.content ~ (render_fenced_block(request.query, "graphql") | indent(2, true)) -%}
+{%- set ns.content = ns.content ~ (render_fenced_block(request.variables|tojson(indent=2), "json") | indent(2, true)) -%}
 {% endfor -%}
 {% endif -%}
-{{ render_fenced_block(payload.payload|tojson(indent=2), "json") | indent(2, true) }}
-</details>
+{%- set ns.content = ns.content ~ (render_fenced_block(payload.payload|tojson(indent=2), "json") | indent(2, true)) -%}
+{{ render_collapsible_section(payload.name, ns.content) -}}
 {%- endmacro -%}
 
 {% block document -%}
