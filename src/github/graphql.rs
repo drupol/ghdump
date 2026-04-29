@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::model::{
-    Actor, Comment, ExportDocument, Label, MetadataField, RawGraphQlRequest, RawPayload, Reaction,
-    ReviewComment, ReviewThread,
+    Actor, BranchRef, Comment, ExportDocument, Label, MetadataField, RawGraphQlRequest, RawPayload,
+    Reaction, ReviewComment, ReviewThread,
 };
 
 use super::{
@@ -728,6 +728,22 @@ impl<'a> PullRequestGraphQlFetcher<'a> {
             body: pull.body,
             draft: pull.is_draft,
             merged_by: pull.merged_by.map(to_actor),
+            base: Some(BranchRef {
+                ref_name: pull.base_ref_name.clone(),
+                sha: None,
+                repo_full_name: pull
+                    .base_repository
+                    .as_ref()
+                    .map(|r| r.name_with_owner.clone()),
+            }),
+            head: Some(BranchRef {
+                ref_name: pull.head_ref_name.clone(),
+                sha: None,
+                repo_full_name: pull
+                    .head_repository
+                    .as_ref()
+                    .map(|r| r.name_with_owner.clone()),
+            }),
             author: pull.author.map(to_actor),
             author_association: pull.author_association,
             created_at: Some(pull.created_at),

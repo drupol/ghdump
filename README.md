@@ -198,6 +198,8 @@ Array counts can be computed directly in templates with MiniJinja's `length` fil
 - **draft** (boolean)
 - **merged_at** (RFC 3339 string or `null`)
 - **merged_by** (actor object or `null`)
+- **base** (branch-ref object or `null`) — PR only
+- **head** (branch-ref object or `null`) — PR only
 - **labels** (array of label objects)
 - **assignees** (array of actor objects)
 - **requested_reviewers** (array of actor objects)
@@ -223,6 +225,11 @@ Array counts can be computed directly in templates with MiniJinja's `length` fil
   - **url** (string or `null`)
   - **name** (string or `null`)
   - **email** (string or `null`)
+
+- **branch-ref** (PR only):
+  - **ref_name** (string) — branch name
+  - **sha** (string or `null`) — tip commit SHA (available via REST path)
+  - **repo_full_name** (string or `null`) — `owner/repo` (useful for forks)
 
 - **metadata-field**:
   - **name** (string)

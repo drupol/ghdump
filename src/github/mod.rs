@@ -15,8 +15,8 @@ use url::Url;
 use crate::{
     cli::{ResolvedTarget, ResourceKind},
     model::{
-        Actor, ChangedFile, Comment, CommitAuthor, CommitSummary, ExportDocument, Label,
-        MetadataField, Milestone, RawPayload, Reaction, Review, ReviewComment, ReviewThread,
+        Actor, BranchRef, ChangedFile, Comment, CommitAuthor, CommitSummary, ExportDocument,
+        Label, MetadataField, Milestone, RawPayload, Reaction, Review, ReviewComment, ReviewThread,
         TimelineEntry,
     },
 };
@@ -371,6 +371,16 @@ impl GitHubClient {
             body: pull_request.body.clone().unwrap_or_default(),
             draft: pull_request.draft,
             merged_by: pull_request.merged_by.as_ref().map(to_actor),
+            base: Some(BranchRef {
+                ref_name: pull_request.base.ref_field.clone(),
+                sha: Some(pull_request.base.sha.clone()),
+                repo_full_name: pull_request.base.repo.as_ref().map(|r| r.full_name.clone()),
+            }),
+            head: Some(BranchRef {
+                ref_name: pull_request.head.ref_field.clone(),
+                sha: Some(pull_request.head.sha.clone()),
+                repo_full_name: pull_request.head.repo.as_ref().map(|r| r.full_name.clone()),
+            }),
             author: pull_request.user.as_ref().map(to_actor),
             author_association: issue.author_association.clone(),
             created_at: Some(pull_request.created_at),

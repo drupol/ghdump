@@ -157,6 +157,13 @@ pub struct RawPayload {
     pub graphql_requests: Vec<RawGraphQlRequest>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct BranchRef {
+    pub ref_name: String,
+    pub sha: Option<String>,
+    pub repo_full_name: Option<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct ExportDocument {
     pub kind: ResourceKind,
@@ -169,6 +176,8 @@ pub struct ExportDocument {
     pub body: String,
     pub draft: bool,
     pub merged_by: Option<Actor>,
+    pub base: Option<BranchRef>,
+    pub head: Option<BranchRef>,
     pub author: Option<Actor>,
     pub author_association: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
@@ -202,6 +211,8 @@ impl Default for ExportDocument {
             body: String::new(),
             draft: false,
             merged_by: None,
+            base: None,
+            head: None,
             author: None,
             author_association: None,
             created_at: None,

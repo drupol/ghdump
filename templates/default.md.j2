@@ -342,6 +342,8 @@ unknown
     {"name": "Closed", "value": closed_at},
     {"name": "Merged", "value": merged_at},
     {"name": "Merged by", "value": render_actor(merged_by) if merged_by else none},
+    {"name": "Base", "value": ((base.repo_full_name ~ ":" ~ base.ref_name) if base.repo_full_name else base.ref_name) if base else none, "wrap": "`"},
+    {"name": "Head", "value": ((head.repo_full_name ~ ":" ~ head.ref_name) if head.repo_full_name else head.ref_name) if head else none, "wrap": "`"},
     {"name": "Draft", "value": "Yes" if draft else "No"},
     {"name": "Milestone", "value": milestone, "key": "title"},
     {"name": "Requested reviewers", "value": requested_reviewer_list},

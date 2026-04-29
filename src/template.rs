@@ -7,9 +7,9 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::model::{
-    Actor, ChangedFile, Comment, CommitAuthor, CommitSummary, ExportDocument, Label, MetadataField,
-    Milestone, RawGraphQlRequest, RawPayload, Reaction, Review, ReviewComment, ReviewThread,
-    TimelineEntry,
+    Actor, BranchRef, ChangedFile, Comment, CommitAuthor, CommitSummary, ExportDocument, Label,
+    MetadataField, Milestone, RawGraphQlRequest, RawPayload, Reaction, Review, ReviewComment,
+    ReviewThread, TimelineEntry,
 };
 
 const DEFAULT_TEMPLATE_NAME: &str = "document.md.j2";
@@ -92,6 +92,15 @@ struct TemplateContext {
     merged_at: Option<String>,
     merged_by: Option<ActorContext>,
     draft: bool,
+    base: Option<BranchRefContext>,
+    head: Option<BranchRefContext>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct BranchRefContext {
+    ref_name: String,
+    sha: Option<String>,
+    repo_full_name: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -339,6 +348,32 @@ impl TemplateContext {
                 .map(|f| f.value.clone()),
             merged_by: document.merged_by.as_ref().map(ActorContext::from_actor),
             draft: document.draft,
+            base: document
+                .base
+                .as_ref()
+                .map(BranchRefContext::from_branch_ref),
+            head: document
+                .head
+                .as_ref()
+                .map(BranchRefContext::from_branch_ref),
+            checks: document
+                .checks
+                .iter()
+                .map(CheckStatusContext::from_check_status)
+                .collect(),
+            state_reason: document.state_reason.clone(),
+            locked: document.locked,
+            active_lock_reason: document.active_lock_reason.clone(),
+        }
+    }
+}
+
+impl BranchRefContext {
+    fn from_branch_ref(branch: &BranchRef) -> Self {
+        Self {
+            ref_name: branch.ref_name.clone(),
+            sha: branch.sha.clone(),
+            repo_full_name: branch.repo_full_name.clone(),
         }
     }
 }
