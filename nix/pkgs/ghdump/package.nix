@@ -6,7 +6,7 @@
 
 rustPlatform.buildRustPackage {
   pname = "ghdump";
-  version = "0.0.2";
+  version = "0.1.1";
 
   __structuredAttrs = true;
 
@@ -21,7 +21,7 @@ rustPlatform.buildRustPackage {
     ];
   };
 
-  cargoHash = "sha256-31m7DEhYC1GL0j53kiiypZUGXNsUcg10dX2KikkJFNY=";
+  cargoHash = "sha256-G24vq74B8NyRq++FlyvR946MWKE0x1n1phTfxFSF8Gs=";
 
   dontUseCargoParallelTests = true;
 

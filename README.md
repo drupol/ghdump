@@ -10,7 +10,8 @@
 The tool expects a GitHub URL as its only argument and detects the resource type automatically from that URL.
 By default it renders Markdown, but the same context can also be rendered as plain text, YAML, TOML, or JSON through an appropriate template.
 
-The template format is based on [MiniJinja] and the default template is stored in `templates/default.md.j2`. The exported context includes normalized data fetched from the GitHub REST and GraphQL APIs, plus raw payloads and export metadata.
+The template format is based on [MiniJinja] and the default template is stored in `templates/default.md.j2`.
+The exported context includes normalized data fetched from the GitHub REST and GraphQL APIs, plus raw payloads and export metadata.
 
 The user is free to design their own templates. A default template is included in the repository as an exhaustive reference that demonstrates the available context (comments, reviews, reactions, metadata, raw payloads, and more).
 
@@ -118,7 +119,8 @@ ghdump https://github.com/owner/repo/pull/456 \
 
 ### Extending the default template
 
-The [built-in Markdown template (`default.md.j2`)][builtin template] is available to custom templates. This lets you override one section while reusing the rest:
+The [built-in Markdown template (`default.md.j2`)][builtin template] is by default available to custom templates.
+This lets you override one section while reusing the rest:
 
 <details>
 <summary>Example: Custom Stats Section</summary>
