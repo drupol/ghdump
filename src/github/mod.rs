@@ -183,7 +183,7 @@ impl GitHubClient {
             number: target.number,
             title: issue.title.clone(),
             url: issue.html_url.clone(),
-            state: issue.state.clone(),
+            state: issue.state.to_lowercase(),
             body: issue.body.clone().unwrap_or_default(),
             author: issue.user.as_ref().map(to_actor),
             author_association: issue.author_association.clone(),
@@ -394,12 +394,15 @@ impl GitHubClient {
             number: target.number,
             title: pull_request.title.clone(),
             url: pull_request.html_url.clone(),
-            state: pull_request.state.clone(),
+            state: pull_request.state.to_lowercase(),
             body: pull_request.body.clone().unwrap_or_default(),
             draft: pull_request.draft,
             merged_by: pull_request.merged_by.as_ref().map(to_actor),
             merge_commit_sha: pull_request.merge_commit_sha.clone(),
-            mergeable_state: pull_request.mergeable_state.clone(),
+            mergeable_state: pull_request
+                .mergeable_state
+                .as_deref()
+                .map(|s| s.to_lowercase()),
             base: Some(BranchRef {
                 ref_name: pull_request.base.ref_field.clone(),
                 sha: Some(pull_request.base.sha.clone()),
@@ -1030,7 +1033,8 @@ fn pull_request_metadata(pull: &RestPullRequest, issue: &RestIssue) -> Vec<Metad
             name: "Mergeable state".to_owned(),
             value: pull
                 .mergeable_state
-                .clone()
+                .as_deref()
+                .map(|s| s.to_lowercase())
                 .unwrap_or_else(|| "unknown".to_owned()),
         },
         MetadataField {
@@ -1115,7 +1119,7 @@ fn to_label(label: &rest::RestLabel) -> Label {
 fn to_milestone(milestone: &RestMilestone) -> Milestone {
     Milestone {
         title: milestone.title.clone(),
-        state: milestone.state.clone(),
+        state: milestone.state.as_deref().map(|s| s.to_lowercase()),
         due_on: milestone.due_on,
         url: milestone.html_url.clone(),
     }
@@ -1209,7 +1213,7 @@ fn to_review(review: &RestPullRequestReview) -> Review {
         url: review.html_url.clone(),
         author: review.user.as_ref().map(to_actor),
         author_association: review.author_association.clone(),
-        state: review.state.clone(),
+        state: review.state.to_lowercase(),
         body: review.body.clone().unwrap_or_default(),
         submitted_at: review.submitted_at,
         commit_id: review.commit_id.clone(),
@@ -1367,7 +1371,7 @@ fn to_timeline_entry(event: &RestTimelineEvent) -> TimelineEntry {
     if let Some(state) = event.state.as_ref() {
         details.push(MetadataField {
             name: "State".to_owned(),
-            value: state.clone(),
+            value: state.to_lowercase(),
         });
     }
     if let Some(label) = event.label.as_ref() {
@@ -1408,7 +1412,7 @@ fn to_timeline_entry(event: &RestTimelineEvent) -> TimelineEntry {
     if let Some(review_state) = event.reviewed.as_ref() {
         details.push(MetadataField {
             name: "Review state".to_owned(),
-            value: review_state.clone(),
+            value: review_state.to_lowercase(),
         });
     }
 
@@ -1506,7 +1510,7 @@ mod tests {
             number: 7,
             title: issue.title.clone(),
             url: issue.html_url.clone(),
-            state: issue.state.clone(),
+            state: issue.state.to_lowercase(),
             body: issue.body.clone().unwrap_or_default(),
             author: issue.user.as_ref().map(to_actor),
             author_association: issue.author_association.clone(),
@@ -1545,7 +1549,7 @@ mod tests {
             number: 11,
             title: pull_request.title.clone(),
             url: pull_request.html_url.clone(),
-            state: pull_request.state.clone(),
+            state: pull_request.state.to_lowercase(),
             body: pull_request.body.clone().unwrap_or_default(),
             author: pull_request.user.as_ref().map(to_actor),
             author_association: issue.author_association.clone(),
