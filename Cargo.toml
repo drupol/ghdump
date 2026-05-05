@@ -1,6 +1,6 @@
 [package]
 name = "ghdump"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["Pol Dellaiera <pol.dellaiera@protonmail.com>"]
 homepage = "https://github.com/drupol/ghdump"
@@ -13,7 +13,7 @@ description = "Export GitHub issues, pull requests, and discussions through cust
 
 [dependencies]
 anyhow = "1.0.100"
-cacache-ttl = "0.2.0"
+cacache-ttl = "0.2.2"
 futures = "0.3.32"
 chrono = { version = "0.4.42", features = ["serde"] }
 clap = { version = "4.5.54", features = ["derive"] }
