@@ -6,7 +6,7 @@ use url::Url;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "ghdump",
+    name = env!("CARGO_PKG_NAME"),
     version,
     about = env!("CARGO_PKG_DESCRIPTION")
 )]
@@ -58,6 +58,40 @@ pub struct Cli {
         help_heading = "Advanced"
     )]
     pub user_agent: String,
+
+    #[arg(long, help = "Bypass the HTTP cache", help_heading = "Cache")]
+    pub no_cache: bool,
+
+    #[arg(
+        long,
+        help = "Refresh cached entries instead of revalidating or reusing them",
+        help_heading = "Cache"
+    )]
+    pub refresh: bool,
+
+    #[arg(
+        long,
+        help = "Use cached responses only and fail on cache misses",
+        help_heading = "Cache"
+    )]
+    pub offline: bool,
+
+    #[arg(
+        long,
+        value_name = "SECONDS",
+        default_value_t = 300,
+        help = "TTL for GraphQL cache entries",
+        help_heading = "Cache"
+    )]
+    pub cache_ttl: u64,
+
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "Directory for cached HTTP responses",
+        help_heading = "Cache"
+    )]
+    pub cache_dir: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -152,6 +186,11 @@ mod tests {
             api_base_url: "https://api.github.com".to_owned(),
             graphql_url: "https://api.github.com/graphql".to_owned(),
             user_agent: "ghdump/test".to_owned(),
+            no_cache: false,
+            refresh: false,
+            offline: false,
+            cache_ttl: 300,
+            cache_dir: None,
         };
 
         let target = cli.resolve().expect("URL should parse");
@@ -172,6 +211,11 @@ mod tests {
             api_base_url: "https://api.github.com".to_owned(),
             graphql_url: "https://api.github.com/graphql".to_owned(),
             user_agent: "ghdump/test".to_owned(),
+            no_cache: false,
+            refresh: false,
+            offline: false,
+            cache_ttl: 300,
+            cache_dir: None,
         };
 
         let target = cli.resolve().expect("discussion URL should parse");
@@ -192,6 +236,11 @@ mod tests {
             api_base_url: "https://api.github.com".to_owned(),
             graphql_url: "https://api.github.com/graphql".to_owned(),
             user_agent: "ghdump/test".to_owned(),
+            no_cache: false,
+            refresh: false,
+            offline: false,
+            cache_ttl: 300,
+            cache_dir: None,
         };
 
         let error = cli.resolve().expect_err("non-URL target should fail");

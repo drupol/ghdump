@@ -21,9 +21,7 @@ rustPlatform.buildRustPackage {
     ];
   };
 
-  cargoHash = "sha256-kuXtBrMk1s5mDjMVL/BKV+8qRlJ/g0Svv07IQepcQE8=";
-
-  dontUseCargoParallelTests = true;
+  cargoHash = "sha256-/xSV3Rf9pzJwUWePhcpoCUWZ79cqxqu0He+idSYd9aU=";
 
   doInstallCheck = true;
   nativeInstallCheckInputs = [ versionCheckHook ];

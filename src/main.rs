@@ -1,3 +1,4 @@
+mod cache;
 mod cli;
 mod github;
 mod model;
@@ -11,6 +12,7 @@ use anyhow::Context;
 use clap::Parser;
 
 use crate::{
+    cache::{CacheConfig, CacheMode},
     cli::Cli,
     github::{GitHubClient, GitHubConfig},
 };
@@ -30,11 +32,36 @@ async fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let resolved = cli.resolve().context("failed to resolve CLI arguments")?;
 
+    let selected_cache_modes = [cli.no_cache, cli.refresh, cli.offline]
+        .into_iter()
+        .filter(|enabled| *enabled)
+        .count();
+    if selected_cache_modes > 1 {
+        anyhow::bail!("--no-cache, --refresh, and --offline are mutually exclusive");
+    }
+
+    let cache_mode = if cli.no_cache {
+        CacheMode::Bypass
+    } else if cli.refresh {
+        CacheMode::Refresh
+    } else if cli.offline {
+        CacheMode::Offline
+    } else {
+        CacheMode::Auto
+    };
+
     let client = GitHubClient::new(GitHubConfig {
         api_base_url: cli.api_base_url.clone(),
         graphql_url: cli.graphql_url.clone(),
         user_agent: cli.user_agent.clone(),
-        token: std::env::var("GITHUB_TOKEN").ok(),
+        cache: CacheConfig {
+            mode: cache_mode,
+            root: cli
+                .cache_dir
+                .clone()
+                .unwrap_or_else(CacheConfig::default_root),
+            ttl_seconds: cli.cache_ttl,
+        },
     })?;
 
     let export = client
