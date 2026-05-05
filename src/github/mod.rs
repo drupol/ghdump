@@ -6,13 +6,17 @@ use std::collections::HashMap;
 use anyhow::{Context, bail};
 use futures::future::join_all;
 use reqwest::{
-    Client,
-    header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue, USER_AGENT},
+    Client, StatusCode,
+    header::{
+        ACCEPT, AUTHORIZATION, ETAG, HeaderMap, HeaderValue, IF_MODIFIED_SINCE, IF_NONE_MATCH,
+        LAST_MODIFIED, USER_AGENT,
+    },
 };
 use serde_json::{Value, json};
 use url::Url;
 
 use crate::{
+    cache::{CacheConfig, CacheMode, CacheStore, CachedResponse},
     cli::{ResolvedTarget, ResourceKind},
     model::{
         Actor, BranchRef, ChangedFile, CheckStatus, Comment, CommitAuthor, CommitSummary,
@@ -37,7 +41,7 @@ pub struct GitHubConfig {
     pub api_base_url: String,
     pub graphql_url: String,
     pub user_agent: String,
-    pub token: Option<String>,
+    pub cache: CacheConfig,
 }
 
 #[derive(Clone)]
@@ -46,11 +50,16 @@ pub struct GitHubClient {
     rest_base_url: Url,
     graphql_url: Url,
     token_available: bool,
+    cache: CacheStore,
 }
 
 impl GitHubClient {
     pub fn new(config: GitHubConfig) -> anyhow::Result<Self> {
-        let token = config.token.filter(|token| !token.trim().is_empty());
+        Self::with_token(config, std::env::var("GITHUB_TOKEN").ok())
+    }
+
+    fn with_token(config: GitHubConfig, token: Option<String>) -> anyhow::Result<Self> {
+        let token = token.filter(|token| !token.trim().is_empty());
         let mut headers = HeaderMap::new();
         headers.insert(
             ACCEPT,
@@ -90,6 +99,7 @@ impl GitHubClient {
             graphql_url: Url::parse(&config.graphql_url)
                 .context("invalid GitHub GraphQL API URL")?,
             token_available: token.is_some(),
+            cache: CacheStore::new(config.cache, token.as_deref()),
         })
     }
 
@@ -580,19 +590,57 @@ impl GitHubClient {
     ) -> anyhow::Result<(T, String)> {
         let url = self.rest_url(path, None);
         let url_string = url.to_string();
+        let cache_key = self.cache.key("GET", &url_string, GITHUB_API_VERSION);
 
-        let response = self
-            .client
-            .get(url.clone())
+        if self.cache.mode() == CacheMode::Offline {
+            let payload = self.cache.require_cached(&cache_key, &url_string)?;
+            return Ok((payload, url_string));
+        }
+
+        let cached = if self.cache.mode() == CacheMode::Refresh {
+            None
+        } else {
+            self.cache.read(&cache_key)?
+        };
+
+        let mut request = self.client.get(url.clone());
+        if let Some(cached) = cached.as_ref() {
+            if let Some(etag) = cached.etag.as_ref() {
+                request = request.header(IF_NONE_MATCH, etag);
+            } else if let Some(last_modified) = cached.last_modified.as_ref() {
+                request = request.header(IF_MODIFIED_SINCE, last_modified);
+            }
+        }
+
+        let response = request
             .send()
             .await
             .with_context(|| format!("REST request failed for {url}"))?;
+
+        if response.status() == StatusCode::NOT_MODIFIED {
+            let cached = cached.context("REST response returned 304 without a cached body")?;
+            let payload = serde_json::from_value(cached.body)
+                .with_context(|| format!("failed to decode cached REST response for {url}"))?;
+            return Ok((payload, url_string));
+        }
+
         let response = response
             .error_for_status()
             .with_context(|| format!("REST request returned an error for {url}"))?;
-        let payload = response
+        let headers = response.headers().clone();
+        let body: Value = response
             .json()
             .await
+            .with_context(|| format!("failed to decode REST response for {url}"))?;
+        self.cache.write(
+            &cache_key,
+            &CachedResponse::new(
+                header_to_string(&headers, ETAG.as_str()),
+                header_to_string(&headers, LAST_MODIFIED.as_str()),
+                body.clone(),
+            ),
+        )?;
+        let payload = serde_json::from_value(body)
             .with_context(|| format!("failed to decode REST response for {url}"))?;
 
         Ok((payload, url_string))
@@ -608,20 +656,75 @@ impl GitHubClient {
 
         loop {
             let url = self.rest_url(path, Some(page));
-            request_urls.push(url.to_string());
+            let url_string = url.to_string();
+            request_urls.push(url_string.clone());
+            let cache_key = self.cache.key("GET", &url_string, GITHUB_API_VERSION);
 
-            let response = self
-                .client
-                .get(url.clone())
+            if self.cache.mode() == CacheMode::Offline {
+                let batch: Vec<T> = self.cache.require_cached(&cache_key, &url_string)?;
+                let batch_len = batch.len();
+                out.extend(batch);
+
+                if batch_len < 100 {
+                    break;
+                }
+
+                page += 1;
+                continue;
+            }
+
+            let cached = if self.cache.mode() == CacheMode::Refresh {
+                None
+            } else {
+                self.cache.read(&cache_key)?
+            };
+
+            let mut request = self.client.get(url.clone());
+            if let Some(cached) = cached.as_ref() {
+                if let Some(etag) = cached.etag.as_ref() {
+                    request = request.header(IF_NONE_MATCH, etag);
+                } else if let Some(last_modified) = cached.last_modified.as_ref() {
+                    request = request.header(IF_MODIFIED_SINCE, last_modified);
+                }
+            }
+
+            let response = request
                 .send()
                 .await
                 .with_context(|| format!("REST request failed for {url}"))?;
+
+            if response.status() == StatusCode::NOT_MODIFIED {
+                let cached = cached.context("REST response returned 304 without a cached body")?;
+                let batch: Vec<T> = serde_json::from_value(cached.body)
+                    .with_context(|| format!("failed to decode cached REST response for {url}"))?;
+                let batch_len = batch.len();
+                out.extend(batch);
+
+                if batch_len < 100 {
+                    break;
+                }
+
+                page += 1;
+                continue;
+            }
+
             let response = response
                 .error_for_status()
                 .with_context(|| format!("REST request returned an error for {url}"))?;
-            let batch: Vec<T> = response
+            let headers = response.headers().clone();
+            let body: Value = response
                 .json()
                 .await
+                .with_context(|| format!("failed to decode REST response for {url}"))?;
+            self.cache.write(
+                &cache_key,
+                &CachedResponse::new(
+                    header_to_string(&headers, ETAG.as_str()),
+                    header_to_string(&headers, LAST_MODIFIED.as_str()),
+                    body.clone(),
+                ),
+            )?;
+            let batch: Vec<T> = serde_json::from_value(body)
                 .with_context(|| format!("failed to decode REST response for {url}"))?;
 
             let batch_len = batch.len();
@@ -720,6 +823,23 @@ impl GitHubClient {
             "query": query,
             "variables": variables,
         });
+        let payload_string =
+            serde_json::to_string(&payload).context("failed to serialize GraphQL request")?;
+        let graphql_url = self.graphql_url.to_string();
+        let cache_key = self.cache.key("POST", &graphql_url, &payload_string);
+
+        if self.cache.mode() == CacheMode::Offline {
+            let Some(cached) = self.cache.read(&cache_key)? else {
+                bail!("cache miss for GraphQL request while running with --offline");
+            };
+            return decode_graphql_body(cached.body);
+        }
+
+        if self.cache.mode() == CacheMode::Auto
+            && let Some(cached) = self.cache.read(&cache_key)?
+        {
+            return decode_graphql_body(cached.body);
+        }
 
         let response = self
             .client
@@ -732,21 +852,14 @@ impl GitHubClient {
             .error_for_status()
             .context("GraphQL request returned an error")?;
 
-        let body: graphql::GraphQlEnvelope<T> = response
+        let body: Value = response
             .json()
             .await
             .context("failed to decode GraphQL response")?;
+        self.cache
+            .write(&cache_key, &CachedResponse::new(None, None, body.clone()))?;
 
-        if let Some(errors) = body.errors {
-            let messages = errors
-                .into_iter()
-                .map(|error| error.message)
-                .collect::<Vec<_>>()
-                .join("; ");
-            bail!("GraphQL returned errors: {messages}");
-        }
-
-        body.data.context("GraphQL response contained no data")
+        decode_graphql_body(body)
     }
 
     pub(crate) fn has_token(&self) -> bool {
@@ -988,6 +1101,29 @@ impl GitHubClient {
         }
         url
     }
+}
+
+fn header_to_string(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+}
+
+fn decode_graphql_body<T: serde::de::DeserializeOwned>(body: Value) -> anyhow::Result<T> {
+    let body: graphql::GraphQlEnvelope<T> =
+        serde_json::from_value(body).context("failed to decode GraphQL response")?;
+
+    if let Some(errors) = body.errors {
+        let messages = errors
+            .into_iter()
+            .map(|error| error.message)
+            .collect::<Vec<_>>()
+            .join("; ");
+        bail!("GraphQL returned errors: {messages}");
+    }
+
+    body.data.context("GraphQL response contained no data")
 }
 
 fn issue_metadata(issue: &RestIssue) -> Vec<MetadataField> {
@@ -1483,6 +1619,7 @@ fn to_commit_summary(commit: &RestCommit) -> CommitSummary {
 #[cfg(test)]
 mod tests {
     use crate::{
+        cache::{CacheConfig, CacheMode},
         cli::ResourceKind,
         model::{ExportDocument, ReviewComment},
         template,
@@ -1497,6 +1634,14 @@ mod tests {
         to_commit_summary, to_label, to_milestone, to_reactions, to_review, to_review_comment,
         to_timeline_entry,
     };
+
+    fn test_cache_config() -> CacheConfig {
+        CacheConfig {
+            mode: CacheMode::Bypass,
+            root: std::env::temp_dir().join("ghdump-test-cache"),
+            ttl_seconds: 300,
+        }
+    }
 
     fn fixture_issue_document() -> ExportDocument {
         let issue: RestIssue = load_json_fixture("issue/rest.issue.json");
@@ -1781,28 +1926,37 @@ mod tests {
 
     #[test]
     fn treats_blank_github_token_as_missing() {
-        let empty_token_client = GitHubClient::new(GitHubConfig {
-            api_base_url: "https://api.github.com".to_owned(),
-            graphql_url: "https://api.github.com/graphql".to_owned(),
-            user_agent: "ghdump/test".to_owned(),
-            token: Some(String::new()),
-        })
+        let empty_token_client = GitHubClient::with_token(
+            GitHubConfig {
+                api_base_url: "https://api.github.com".to_owned(),
+                graphql_url: "https://api.github.com/graphql".to_owned(),
+                user_agent: "ghdump/test".to_owned(),
+                cache: test_cache_config(),
+            },
+            Some(String::new()),
+        )
         .expect("client with empty token should build");
 
-        let whitespace_token_client = GitHubClient::new(GitHubConfig {
-            api_base_url: "https://api.github.com".to_owned(),
-            graphql_url: "https://api.github.com/graphql".to_owned(),
-            user_agent: "ghdump/test".to_owned(),
-            token: Some("   ".to_owned()),
-        })
+        let whitespace_token_client = GitHubClient::with_token(
+            GitHubConfig {
+                api_base_url: "https://api.github.com".to_owned(),
+                graphql_url: "https://api.github.com/graphql".to_owned(),
+                user_agent: "ghdump/test".to_owned(),
+                cache: test_cache_config(),
+            },
+            Some("   ".to_owned()),
+        )
         .expect("client with whitespace token should build");
 
-        let valid_token_client = GitHubClient::new(GitHubConfig {
-            api_base_url: "https://api.github.com".to_owned(),
-            graphql_url: "https://api.github.com/graphql".to_owned(),
-            user_agent: "ghdump/test".to_owned(),
-            token: Some("fixture-token".to_owned()),
-        })
+        let valid_token_client = GitHubClient::with_token(
+            GitHubConfig {
+                api_base_url: "https://api.github.com".to_owned(),
+                graphql_url: "https://api.github.com/graphql".to_owned(),
+                user_agent: "ghdump/test".to_owned(),
+                cache: test_cache_config(),
+            },
+            Some("fixture-token".to_owned()),
+        )
         .expect("client with valid token should build");
 
         assert!(!empty_token_client.has_token());

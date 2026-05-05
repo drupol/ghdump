@@ -1905,6 +1905,7 @@ query DiscussionReplies($id: ID!, $cursor: String) {
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use crate::{
+        cache::{CacheConfig, CacheMode},
         cli::ResourceKind,
         github::{GitHubClient, GitHubConfig},
         model::{ExportDocument, MetadataField},
@@ -1917,6 +1918,14 @@ mod tests {
         GraphQlDiscussion, GraphQlReactionGroup, GraphQlUsersConnection,
         PULL_REQUEST_COMMENTS_QUERY, PULL_REQUEST_QUERY, to_actor, to_label, to_reactions,
     };
+
+    fn test_cache_config() -> CacheConfig {
+        CacheConfig {
+            mode: CacheMode::Bypass,
+            root: std::env::temp_dir().join("ghdump-test-cache"),
+            ttl_seconds: 300,
+        }
+    }
 
     #[test]
     fn discussion_queries_only_expand_one_reply_level_per_request() {
@@ -1993,12 +2002,15 @@ mod tests {
 
     #[tokio::test]
     async fn discussion_fixture_renders_without_network() {
-        let client = GitHubClient::new(GitHubConfig {
-            api_base_url: "https://api.github.com".to_owned(),
-            graphql_url: "https://api.github.com/graphql".to_owned(),
-            user_agent: "ghdump/test".to_owned(),
-            token: Some("fixture-token".to_owned()),
-        })
+        let client = GitHubClient::with_token(
+            GitHubConfig {
+                api_base_url: "https://api.github.com".to_owned(),
+                graphql_url: "https://api.github.com/graphql".to_owned(),
+                user_agent: "ghdump/test".to_owned(),
+                cache: test_cache_config(),
+            },
+            Some("fixture-token".to_owned()),
+        )
         .expect("fixture client should build");
         let fetcher = DiscussionFetcher::new(&client);
         let discussion: GraphQlDiscussion = load_json_fixture("discussion/graphql.discussion.json");

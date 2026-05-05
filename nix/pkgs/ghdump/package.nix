@@ -6,7 +6,7 @@
 
 rustPlatform.buildRustPackage {
   pname = "ghdump";
-  version = "0.1.2";
+  version = "0.2.0";
 
   __structuredAttrs = true;
 
@@ -21,9 +21,7 @@ rustPlatform.buildRustPackage {
     ];
   };
 
-  cargoHash = "sha256-kuXtBrMk1s5mDjMVL/BKV+8qRlJ/g0Svv07IQepcQE8=";
-
-  dontUseCargoParallelTests = true;
+  cargoHash = "sha256-C/9SD2pjNEJE8Yd/v09GzgL0fLPU5pzNCAPnUZ2Zq8Q=";
 
   doInstallCheck = true;
   nativeInstallCheckInputs = [ versionCheckHook ];
